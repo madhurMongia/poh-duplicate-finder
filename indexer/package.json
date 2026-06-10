@@ -1,0 +1,14 @@
+{
+  "name": "@pohdf/indexer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@pohdf/core": "*",
+    "onnxruntime-node": "^1.20.1",
+    "tsx": "^4.19.2"
+  }
+}

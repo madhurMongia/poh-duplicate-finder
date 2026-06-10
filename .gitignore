@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+models/
+.netlify/
+.env
+.env.*
+*.local
+.DS_Store

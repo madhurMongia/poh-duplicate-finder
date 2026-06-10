@@ -1,0 +1,38 @@
+name: Index
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "'update' (incremental) or 'bootstrap' (full rebuild)"
+        required: false
+        default: 'update'
+
+concurrency:
+  group: indexer
+  cancel-in-progress: false
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w core
+      - uses: actions/cache@v4
+        with:
+          path: models
+          key: buffalo-s-v0.7
+      - run: npm run models:download
+      - run: npm run indexer -- ${{ github.event.inputs.mode || 'update' }}
+        env:
+          MAINNET_SUBGRAPH_URL: ${{ secrets.MAINNET_SUBGRAPH_URL }}
+          GNOSIS_SUBGRAPH_URL: ${{ secrets.GNOSIS_SUBGRAPH_URL }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
