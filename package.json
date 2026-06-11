@@ -17,6 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "knip": "knip",
+    "prepare": "husky",
     "indexer": "npm run start -w indexer --",
     "models:download": "tsx scripts/download-models.ts",
     "models:upload": "tsx scripts/upload-models.ts"
@@ -30,6 +31,7 @@
     "@types/node": "^20.17.10",
     "eslint": "^9.17.0",
     "eslint-config-prettier": "^9.1.0",
+    "husky": "^9.1.7",
     "knip": "^5.88.1",
     "prettier": "^3.4.2",
     "tsx": "^4.19.2",

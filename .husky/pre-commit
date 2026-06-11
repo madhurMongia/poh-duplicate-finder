@@ -1,0 +1,7 @@
+# Pick up the repo's Node version when the shell defaults to an older one.
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm use --silent
+
+npm run lint
+npm run typecheck
+npm test

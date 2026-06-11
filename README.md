@@ -44,7 +44,7 @@ npm run build           # build core + web
 npm test                # vitest unit + integration suites
 npm run lint            # eslint
 npm run typecheck       # tsc over every workspace + functions
-npm run knip            # unused files/exports/dependencies
+npm run knip            # unused files/exports/dependencies (local-only, not in CI)
 npm run format          # prettier check
 
 npm run models:download # fetch ONNX models into ./models
@@ -54,6 +54,9 @@ npm run indexer -- bootstrap  # full rebuild
 ```
 
 Local dev: `npm run build -w core && netlify dev` (serves the SPA + functions on :8888).
+
+Git hooks: husky runs lint + typecheck + tests on every commit (installed via `npm install`'s
+`prepare` script; the hook sources nvm to pick up the repo's Node 20).
 
 ## Environment
 

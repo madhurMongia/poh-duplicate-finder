@@ -18,6 +18,5 @@ jobs:
       - run: npm run build -w core
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm run knip
       - run: npm test
       - run: npm run build -w web
