@@ -70,6 +70,7 @@ export class OnnxFacePipeline implements FacePipeline {
   }
 
   async embedFace(imageBytes: Uint8Array): Promise<EmbedResult> {
+    // 1. Decode the photo to raw RGBA.
     let image;
     try {
       image = await this.decoder.decode(imageBytes);
@@ -77,6 +78,7 @@ export class OnnxFacePipeline implements FacePipeline {
       return { ok: false, code: 'DECODE_FAILED', message: `image decode failed: ${String(err)}` };
     }
 
+    // 2. Detect: letterbox to the detector's square input and decode anchors.
     const { image: boxed, scale } = letterbox(image, this.scrfdConfig.inputSize);
     const detInput = rgbaToChwFloat(boxed, SCRFD_MEAN, SCRFD_STD);
     const size = this.scrfdConfig.inputSize;
@@ -90,6 +92,8 @@ export class OnnxFacePipeline implements FacePipeline {
     }
     const best = faces.reduce((a, b) => (b.score > a.score ? b : a));
 
+    // 3. Align: fit landmarks -> template, then warp the *original* image
+    // (not the letterboxed one) into the canonical 112x112 ArcFace crop.
     const toTemplate = estimateSimilarity(best.landmarks, ARCFACE_TEMPLATE);
     const crop = warpAffineBilinear(
       image,
@@ -97,6 +101,8 @@ export class OnnxFacePipeline implements FacePipeline {
       ARCFACE_CROP_SIZE,
       ARCFACE_CROP_SIZE,
     );
+    // 4. Embed: run the recognition net and L2-normalize so that comparing
+    // two faces reduces to a dot product (cosine similarity).
     const recInput = preprocessAlignedFace(crop);
     const recOut = await this.recognition.run({
       [this.recognition.inputNames[0]]: {

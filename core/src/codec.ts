@@ -10,6 +10,11 @@ const PREAMBLE_BYTES = 8; // magic u32 + header length u32, both little-endian
  *   u32 magic | u32 headerLen | headerJson (padded to 4 bytes) |
  *   f32 scales[count] | i8 vectors[count * dims]
  * Vectors are int8-quantized per row with a float32 scale (max-abs / 127).
+ *
+ * Why int8 is safe here: quantization error is at most scale/2 ≈ maxAbs/254
+ * per component — orders of magnitude below the cosine-score gap between
+ * same-person and different-person pairs — and rows are renormalized to unit
+ * length on decode. The payoff is a 4x smaller blob (~512 B per face).
  */
 export function encodeIndex(index: FaceIndex): Uint8Array {
   const { header, vectors } = index;

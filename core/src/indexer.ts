@@ -89,6 +89,8 @@ export async function runIndexer(
     const requests = await subgraph.fetchClaimRequestsSince(chain, since);
     log.info(`${chain}: ${requests.length} new claim requests since ${since}`);
     for (const req of requests) {
+      // Advance the checkpoint over every fetched request — even known
+      // duplicates — so the next run's `creationTime_gt` skips them.
       checkpoints[chain] = Math.max(checkpoints[chain] ?? 0, req.creationTime);
       if (known.has(req.requestId)) continue;
       known.add(req.requestId);
@@ -149,6 +151,9 @@ export async function runIndexer(
 
   index = appendToIndex(index, newEntries, newRows);
 
+  // Statuses are cheap subgraph metadata (no IPFS, no ML), so refresh every
+  // entry on every run — revocations and expiries become visible without
+  // ever re-embedding a photo.
   const statusByKey = new Map<string, ReturnType<typeof deriveStatus>>();
   for (const chain of subgraph.chains()) {
     const snapshot = await subgraph.fetchStatusSnapshot(chain);

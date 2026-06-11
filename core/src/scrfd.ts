@@ -38,9 +38,15 @@ export const SCRFD_STD = 128;
 /**
  * Decode raw SCRFD outputs. `outputs` must be ordered as the model emits them:
  * scores for each stride, then bbox distances for each stride, then keypoint
- * offsets for each stride. Distances are in stride units (insightface
- * convention). `scale` is the letterbox scale; results are mapped back to
- * original image coordinates.
+ * offsets for each stride (the insightface det_500m export emits exactly this
+ * 9-tensor order).
+ *
+ * Geometry: each stride defines a (inputSize/stride)² grid of cells, with
+ * `anchorsPerCell` anchors sharing the cell's center (col·stride, row·stride).
+ * The network predicts, per anchor, distances from that center to the four
+ * box edges and offsets to the five landmarks — all in stride units.
+ * `scale` is the letterbox scale; results are mapped back to original image
+ * coordinates before NMS.
  */
 export function decodeScrfdOutputs(
   outputs: TensorLike[],

@@ -15,6 +15,7 @@ export function App() {
     setLoading(true);
     setError(null);
     setResult(null);
+    // Object URL for the side-by-side preview; freed by the browser on unload.
     setQueryPreview(request.kind === 'photo' ? URL.createObjectURL(request.photo) : null);
     try {
       const outcome =

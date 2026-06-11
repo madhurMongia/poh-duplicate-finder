@@ -7,7 +7,8 @@ export interface Point {
  * Non-reflective 2D similarity transform:
  *   x' = a*x - b*y + tx
  *   y' = b*x + a*y + ty
- * i.e. uniform scale * rotation + translation.
+ * i.e. uniform scale * rotation + translation. The pair (a, b) encodes
+ * scale·rotation like the complex number a + bi: a = s·cosθ, b = s·sinθ.
  */
 export interface Similarity {
   a: number;
@@ -29,6 +30,12 @@ export function applySimilarity(t: Similarity, p: Point): Point {
  * Least-squares estimate of the similarity transform mapping src[i] -> dst[i].
  * Closed-form Procrustes solution without reflection — the standard way to
  * align detected face landmarks to the ArcFace template.
+ *
+ * Derivation: minimizing Σ‖T(src_i) − dst_i‖² over (a, b, tx, ty) is linear
+ * least squares. With both point sets centered on their means, the normal
+ * equations decouple into a = Σ(src·dst)/Σ‖src‖² (dot products) and
+ * b = Σ(src×dst)/Σ‖src‖² (cross products); the translation then maps the
+ * source centroid onto the destination centroid.
  */
 export function estimateSimilarity(src: Point[], dst: Point[]): Similarity {
   if (src.length !== dst.length || src.length < 2) {
@@ -75,6 +82,11 @@ export function estimateSimilarity(src: Point[], dst: Point[]): Similarity {
   };
 }
 
+/**
+ * Inverse transform, used to warp images: sampling destination pixels requires
+ * the dst -> src mapping. In the complex-number view this is 1/(a + bi) =
+ * (a − bi)/(a² + b²), followed by mapping the translation back through it.
+ */
 export function invertSimilarity(t: Similarity): Similarity {
   const s = t.a * t.a + t.b * t.b;
   if (s === 0) throw new Error('invertSimilarity: zero-scale transform');
