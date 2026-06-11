@@ -1,0 +1,19 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/*.ts", "netlify/functions/*.mts"],
+      "project": ["scripts/**/*.ts", "netlify/functions/**/*.mts"]
+    },
+    "core": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
+    },
+    "indexer": {
+      "project": ["src/**/*.ts"]
+    },
+    "web": {
+      "project": ["src/**/*.{ts,tsx}"]
+    }
+  }
+}

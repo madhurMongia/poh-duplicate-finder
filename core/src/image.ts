@@ -1,5 +1,5 @@
 import { Jimp } from 'jimp';
-import { applySimilarity, type Similarity } from './geometry.js';
+import type { Similarity } from './geometry.js';
 
 export interface RgbaImage {
   width: number;
@@ -37,16 +37,18 @@ export function warpAffineBilinear(
 ): RgbaImage {
   const out = new Uint8Array(dw * dh * 4);
   const { width: sw, height: sh, data } = src;
+  const { a, b, tx, ty } = dstToSrc;
   for (let y = 0; y < dh; y++) {
     for (let x = 0; x < dw; x++) {
-      const sp = applySimilarity(dstToSrc, { x, y });
+      const sx = a * x - b * y + tx;
+      const sy = b * x + a * y + ty;
       const di = (y * dw + x) * 4;
       out[di + 3] = 255;
-      const x0 = Math.floor(sp.x);
-      const y0 = Math.floor(sp.y);
+      const x0 = Math.floor(sx);
+      const y0 = Math.floor(sy);
       if (x0 < -1 || y0 < -1 || x0 > sw - 1 || y0 > sh - 1) continue;
-      const fx = sp.x - x0;
-      const fy = sp.y - y0;
+      const fx = sx - x0;
+      const fy = sy - y0;
       for (let c = 0; c < 3; c++) {
         const v00 = sample(data, sw, sh, x0, y0, c);
         const v10 = sample(data, sw, sh, x0 + 1, y0, c);

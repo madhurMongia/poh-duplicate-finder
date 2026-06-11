@@ -44,6 +44,7 @@ npm run build           # build core + web
 npm test                # vitest unit + integration suites
 npm run lint            # eslint
 npm run typecheck       # tsc over every workspace + functions
+npm run knip            # unused files/exports/dependencies
 npm run format          # prettier check
 
 npm run models:download # fetch ONNX models into ./models

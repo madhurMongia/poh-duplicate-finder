@@ -1,53 +1,51 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryBlobStore } from '../src/blobstore.js';
 import { encodeIndex } from '../src/codec.js';
-import { DEFAULT_INDEX_BLOB_KEY, EMBEDDING_DIMS } from '../src/constants.js';
-import { LookupError, parseProfileRef, performLookup, type LookupDeps } from '../src/lookup.js';
+import { DEFAULT_INDEX_BLOB_KEY } from '../src/constants.js';
+import {
+  createCachedIndexLoader,
+  LookupError,
+  parseProfileRef,
+  performLookup,
+  type LookupDeps,
+} from '../src/lookup.js';
 import type { FaceIndex } from '../src/types.js';
-import { FakeIpfs, FakePipeline, FakeSubgraph, makeEntry, unitVector } from './helpers.js';
+import { buildIndex, FakeIpfs, FakePipeline, FakeSubgraph, makeEntry, unitVector } from './helpers.js';
 
 const H1 = '0x' + 'a'.repeat(40);
 const H2 = '0x' + 'b'.repeat(40);
 const H3 = '0x' + 'c'.repeat(40);
 
 function registryIndex(): FaceIndex {
-  const rows = [unitVector(0), unitVector(1), unitVector(2)];
-  const vectors = new Float32Array(rows.length * EMBEDDING_DIMS);
-  rows.forEach((r, i) => vectors.set(r, i * EMBEDDING_DIMS));
-  return {
-    header: {
-      version: 1,
-      modelId: 'fake-model@1',
-      dims: EMBEDDING_DIMS,
-      count: 3,
-      builtAt: 1_750_000_000,
-      checkpoints: { gnosis: 300 },
-      retries: [],
-      entries: [
-        makeEntry({ humanityId: H1, requestId: '0xr1' }),
-        makeEntry({ humanityId: H2, requestId: '0xr2', status: 'expired', name: 'Bob' }),
-        makeEntry({ humanityId: H3, requestId: '0xr3', chain: 'mainnet' }),
-      ],
-    },
-    vectors,
-  };
+  return buildIndex(
+    [
+      makeEntry({ humanityId: H1, requestId: '0xr1' }),
+      makeEntry({ humanityId: H2, requestId: '0xr2', status: 'expired', name: 'Bob' }),
+      makeEntry({ humanityId: H3, requestId: '0xr3', chain: 'mainnet' }),
+    ],
+    [unitVector(0), unitVector(1), unitVector(2)],
+    { builtAt: 1_750_000_000, checkpoints: { gnosis: 300 } },
+  );
 }
 
-async function setup(withIndex = true) {
-  const blobs = new InMemoryBlobStore();
-  if (withIndex) await blobs.set(DEFAULT_INDEX_BLOB_KEY, encodeIndex(registryIndex()));
+function setup(withIndex = true) {
   const subgraph = new FakeSubgraph(['gnosis']);
   const ipfs = new FakeIpfs();
   const pipeline = new FakePipeline();
-  const deps: LookupDeps = { blobs, subgraph, ipfs, pipeline };
-  return { deps, blobs, subgraph, ipfs, pipeline };
+  const deps: LookupDeps = {
+    loadIndex: async () => (withIndex ? registryIndex() : null),
+    subgraph,
+    ipfs,
+    pipeline,
+  };
+  return { deps, subgraph, ipfs, pipeline };
 }
 
 const photo = (key: string) => new TextEncoder().encode(key);
 
 describe('performLookup with a photo', () => {
   it('ranks the registry against the uploaded photo', async () => {
-    const { deps, pipeline } = await setup();
+    const { deps, pipeline } = setup();
     pipeline.onEmbedding('query', unitVector(1));
 
     const res = await performLookup(deps, { kind: 'photo', bytes: photo('query') });
@@ -68,7 +66,7 @@ describe('performLookup with a photo', () => {
   });
 
   it('propagates embedding failures as typed errors', async () => {
-    const { deps } = await setup();
+    const { deps } = setup();
     await expect(
       performLookup(deps, { kind: 'photo', bytes: photo('unmapped') }),
     ).rejects.toMatchObject({ code: 'NO_FACE' });
@@ -77,7 +75,7 @@ describe('performLookup with a photo', () => {
 
 describe('performLookup with a profile reference', () => {
   it('resolves the profile photo and flags the profile itself as a renewal', async () => {
-    const { deps, subgraph, ipfs, pipeline } = await setup();
+    const { deps, subgraph, ipfs, pipeline } = setup();
     subgraph.profiles.set(H2, {
       humanityId: H2,
       chain: 'gnosis',
@@ -93,7 +91,7 @@ describe('performLookup with a profile reference', () => {
   });
 
   it('fails typed for unknown profiles, malformed refs, and broken photos', async () => {
-    const { deps, subgraph } = await setup();
+    const { deps, subgraph } = setup();
     await expect(
       performLookup(deps, { kind: 'profile', ref: '0x' + 'e'.repeat(40) }),
     ).rejects.toMatchObject({ code: 'PROFILE_NOT_FOUND' });
@@ -110,11 +108,32 @@ describe('performLookup with a profile reference', () => {
 });
 
 describe('performLookup index handling', () => {
-  it('fails when no index blob exists', async () => {
-    const { deps } = await setup(false);
+  it('fails when the loader has no index', async () => {
+    const { deps } = setup(false);
     const err = await performLookup(deps, { kind: 'photo', bytes: photo('q') }).catch((e) => e);
     expect(err).toBeInstanceOf(LookupError);
     expect(err.code).toBe('INDEX_UNAVAILABLE');
+  });
+});
+
+describe('createCachedIndexLoader', () => {
+  it('returns null until the blob exists, then caches the decode for ttlMs', async () => {
+    const blobs = new InMemoryBlobStore();
+    let t = 0;
+    const loader = createCachedIndexLoader(blobs, { ttlMs: 100, now: () => t });
+
+    expect(await loader()).toBeNull(); // missing blob is never cached
+
+    await blobs.set(DEFAULT_INDEX_BLOB_KEY, encodeIndex(registryIndex()));
+    expect((await loader())?.header.count).toBe(3);
+
+    const updated = registryIndex();
+    updated.header.builtAt = 9_999;
+    await blobs.set(DEFAULT_INDEX_BLOB_KEY, encodeIndex(updated));
+    t = 50; // cache still fresh -> old build
+    expect((await loader())?.header.builtAt).toBe(1_750_000_000);
+    t = 150; // ttl expired -> refetch
+    expect((await loader())?.header.builtAt).toBe(9_999);
   });
 });
 

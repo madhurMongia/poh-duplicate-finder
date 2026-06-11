@@ -7,24 +7,25 @@ import {
   encodeIndex,
 } from '../src/codec.js';
 import type { FaceIndex } from '../src/types.js';
-import { makeEntry, mixedVector, unitVector } from './helpers.js';
+import { buildIndex, cosine, makeEntry, mixedVector, unitVector } from './helpers.js';
 
 const DIMS = 8;
 
 function sampleIndex(): FaceIndex {
-  const rows = [
-    unitVector(0, DIMS),
-    mixedVector({ 1: 0.8, 2: 0.6 }, DIMS),
-    mixedVector({ 0: -0.5, 3: 0.5, 7: 0.70710678 }, DIMS),
-  ];
-  const vectors = new Float32Array(rows.length * DIMS);
-  rows.forEach((r, i) => vectors.set(r, i * DIMS));
-  return {
-    header: {
-      version: 1,
+  return buildIndex(
+    // Odd-length name exercises the 4-byte header padding.
+    [
+      makeEntry({ requestId: '0xr1', name: 'Ada' }),
+      makeEntry({ requestId: '0xr2', status: 'expired' }),
+      makeEntry({ requestId: '0xr3', status: 'revoked', chain: 'mainnet' }),
+    ],
+    [
+      unitVector(0, DIMS),
+      mixedVector({ 1: 0.8, 2: 0.6 }, DIMS),
+      mixedVector({ 0: -0.5, 3: 0.5, 7: 0.70710678 }, DIMS),
+    ],
+    {
       modelId: 'test-model@1',
-      dims: DIMS,
-      count: 3,
       builtAt: 1_750_000_000,
       checkpoints: { gnosis: 123, mainnet: 456 },
       retries: [
@@ -38,21 +39,8 @@ function sampleIndex(): FaceIndex {
           lastError: 'boom',
         },
       ],
-      // Odd-length name exercises the 4-byte header padding.
-      entries: [
-        makeEntry({ requestId: '0xr1', name: 'Ada' }),
-        makeEntry({ requestId: '0xr2', status: 'expired' }),
-        makeEntry({ requestId: '0xr3', status: 'revoked', chain: 'mainnet' }),
-      ],
     },
-    vectors,
-  };
-}
-
-function cosine(a: Float32Array, b: Float32Array): number {
-  let dot = 0;
-  for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
-  return dot;
+  );
 }
 
 describe('encodeIndex / decodeIndex', () => {

@@ -8,7 +8,38 @@ import type {
   ResolvedProfile,
   SubgraphApi,
 } from '../src/subgraph.js';
-import type { ChainId, FaceEntry } from '../src/types.js';
+import type { ChainId, FaceEntry, FaceIndex, IndexHeader } from '../src/types.js';
+
+export function cosine(a: Float32Array, b: Float32Array): number {
+  let dot = 0;
+  for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
+  return dot;
+}
+
+/** Pack rows + entries into a FaceIndex; header fields are overridable. */
+export function buildIndex(
+  entries: FaceEntry[],
+  rows: Float32Array[],
+  header: Partial<Omit<IndexHeader, 'count' | 'entries'>> = {},
+): FaceIndex {
+  const dims = rows[0]?.length ?? EMBEDDING_DIMS;
+  const vectors = new Float32Array(rows.length * dims);
+  rows.forEach((row, i) => vectors.set(row, i * dims));
+  return {
+    header: {
+      version: 1,
+      modelId: 'fake-model@1',
+      dims,
+      builtAt: 0,
+      checkpoints: {},
+      retries: [],
+      ...header,
+      count: entries.length,
+      entries,
+    },
+    vectors,
+  };
+}
 
 export function unitVector(hot: number, dims: number = EMBEDDING_DIMS): Float32Array {
   const v = new Float32Array(dims);

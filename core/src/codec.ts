@@ -1,4 +1,3 @@
-import { l2Normalize } from './arcface.js';
 import { EMBEDDING_DIMS } from './constants.js';
 import type { FaceEntry, FaceIndex, IndexHeader } from './types.js';
 
@@ -76,12 +75,18 @@ export function decodeIndex(bytes: Uint8Array): FaceIndex {
   const vectors = new Float32Array(count * dims);
   for (let row = 0; row < count; row++) {
     const scale = view.getFloat32(scalesOffset + row * 4, true);
-    const dequant = new Float32Array(dims);
+    const base = row * dims;
+    let sumSq = 0;
     for (let d = 0; d < dims; d++) {
-      dequant[d] = view.getInt8(vectorsOffset + row * dims + d) * scale;
+      const v = view.getInt8(vectorsOffset + base + d) * scale;
+      vectors[base + d] = v;
+      sumSq += v * v;
     }
-    // Renormalize to erase quantization scale error; ranking assumes unit rows.
-    vectors.set(l2Normalize(dequant), row * dims);
+    // Renormalize in place to erase quantization scale error; ranking assumes unit rows.
+    const norm = Math.sqrt(sumSq);
+    if (norm > 0) {
+      for (let d = 0; d < dims; d++) vectors[base + d] /= norm;
+    }
   }
   return { header, vectors };
 }

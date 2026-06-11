@@ -6,13 +6,44 @@ import { fetchRegistrationPhoto } from './photos.js';
 import type { FacePipeline } from './pipeline.js';
 import { rankMatches } from './ranking.js';
 import type { SubgraphApi } from './subgraph.js';
-import type { LookupErrorCode, LookupResponse } from './types.js';
+import type { FaceIndex, LookupErrorCode, LookupResponse } from './types.js';
+
+/** Resolves the current index, or null when none has been built yet. */
+export type IndexLoader = () => Promise<FaceIndex | null>;
 
 export interface LookupDeps {
-  blobs: BlobStore;
+  loadIndex: IndexLoader;
   subgraph: SubgraphApi;
   ipfs: IpfsJsonApi;
   pipeline: FacePipeline;
+}
+
+export interface CachedIndexLoaderOptions {
+  key?: string;
+  ttlMs?: number;
+  now?: () => number;
+}
+
+/**
+ * Blob-backed IndexLoader that keeps the decoded index for ttlMs, so warm
+ * serverless invocations skip the blob fetch and decode. A missing blob is
+ * never cached — lookups see the index as soon as the first build lands.
+ */
+export function createCachedIndexLoader(
+  blobs: BlobStore,
+  options: CachedIndexLoaderOptions = {},
+): IndexLoader {
+  const key = options.key ?? DEFAULT_INDEX_BLOB_KEY;
+  const ttlMs = options.ttlMs ?? 60_000;
+  const now = options.now ?? Date.now;
+  let cached: { index: FaceIndex; at: number } | null = null;
+  return async () => {
+    if (cached && now() - cached.at < ttlMs) return cached.index;
+    const blob = await blobs.get(key);
+    if (!blob) return null;
+    cached = { index: decodeIndex(blob), at: now() };
+    return cached.index;
+  };
 }
 
 export type LookupInput =
@@ -21,7 +52,6 @@ export type LookupInput =
   | { kind: 'profile'; ref: string };
 
 export interface LookupOptions {
-  blobKey?: string;
   topK?: number;
 }
 
@@ -48,12 +78,10 @@ export async function performLookup(
   input: LookupInput,
   options: LookupOptions = {},
 ): Promise<LookupResponse> {
-  const { blobs, subgraph, ipfs, pipeline } = deps;
-  const blobKey = options.blobKey ?? DEFAULT_INDEX_BLOB_KEY;
+  const { loadIndex, subgraph, ipfs, pipeline } = deps;
 
-  const blob = await blobs.get(blobKey);
-  if (!blob) throw new LookupError('INDEX_UNAVAILABLE', 'face index has not been built yet');
-  const index = decodeIndex(blob);
+  const index = await loadIndex();
+  if (!index) throw new LookupError('INDEX_UNAVAILABLE', 'face index has not been built yet');
 
   let photoBytes: Uint8Array;
   let queryHumanityId: string | undefined;

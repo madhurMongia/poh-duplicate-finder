@@ -4,7 +4,7 @@ import type {
   LookupResponse,
 } from '@pohdf/core';
 
-export type LookupOutcome = LookupResponse | LookupErrorResponse;
+type LookupOutcome = LookupResponse | LookupErrorResponse;
 
 export const IPFS_GATEWAY = 'https://cdn.kleros.link';
 

@@ -1,28 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { rankMatches } from '../src/ranking.js';
 import type { FaceIndex } from '../src/types.js';
-import { makeEntry, mixedVector, unitVector } from './helpers.js';
+import { buildIndex, makeEntry, mixedVector, unitVector } from './helpers.js';
 
 const DIMS = 4;
 
 function indexOf(rows: Float32Array[], humanityIds: string[]): FaceIndex {
-  const vectors = new Float32Array(rows.length * DIMS);
-  rows.forEach((r, i) => vectors.set(r, i * DIMS));
-  return {
-    header: {
-      version: 1,
-      modelId: 'm',
-      dims: DIMS,
-      count: rows.length,
-      builtAt: 0,
-      checkpoints: {},
-      retries: [],
-      entries: humanityIds.map((humanityId, i) =>
-        makeEntry({ humanityId, requestId: `0xr${i}` }),
-      ),
-    },
-    vectors,
-  };
+  return buildIndex(
+    humanityIds.map((humanityId, i) => makeEntry({ humanityId, requestId: `0xr${i}` })),
+    rows,
+  );
 }
 
 const H1 = '0x' + 'a'.repeat(40);
