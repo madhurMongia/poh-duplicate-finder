@@ -1,16 +1,13 @@
 /**
- * Upload the local ONNX models to the site's Netlify blob store, where the
- * lookup function loads them from. One-time setup step (and after model bumps).
+ * Upload the local ONNX models to the blob store the lookup function reads.
+ * One-time setup step (and after model bumps).
  *
- * Requires: NETLIFY_SITE_ID, NETLIFY_AUTH_TOKEN.
+ * Cloud: requires NETLIFY_SITE_ID, NETLIFY_AUTH_TOKEN.
+ * Local: set BLOB_DIR to seed a filesystem store instead (no creds needed).
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import {
-  DEFAULT_BLOB_STORE_NAME,
-  MODEL_BLOB_KEYS,
-  NetlifyBlobStore,
-} from '../core/src/index.js';
+import { MODEL_BLOB_KEYS, resolveBlobStore } from '../core/src/index.js';
 
 const MODELS_DIR = process.env.MODELS_DIR ?? 'models';
 
@@ -21,10 +18,9 @@ function requireEnv(name: string): string {
 }
 
 async function main(): Promise<void> {
-  const blobs = new NetlifyBlobStore({
-    name: process.env.BLOB_STORE_NAME ?? DEFAULT_BLOB_STORE_NAME,
-    siteID: requireEnv('NETLIFY_SITE_ID'),
-    token: requireEnv('NETLIFY_AUTH_TOKEN'),
+  const blobs = resolveBlobStore(process.env, {
+    siteID: process.env.BLOB_DIR ? undefined : requireEnv('NETLIFY_SITE_ID'),
+    token: process.env.BLOB_DIR ? undefined : requireEnv('NETLIFY_AUTH_TOKEN'),
   });
 
   for (const [kind, key] of Object.entries(MODEL_BLOB_KEYS)) {

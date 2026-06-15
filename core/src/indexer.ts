@@ -26,6 +26,13 @@ export interface IndexerOptions {
   /** Ignore any existing index and rebuild from scratch. */
   bootstrap?: boolean;
   maxRetryAttempts?: number;
+  /**
+   * Cap on how many *new* photos to embed this run (retries don't count).
+   * Leftover requests stay beyond the checkpoint and are picked up next run,
+   * so a capped run is fully resumable. Bounds run time/memory; also handy for
+   * standing up a partial index quickly. Unset = no cap.
+   */
+  maxItems?: number;
 }
 
 export interface IndexerSummary {
@@ -84,15 +91,23 @@ export async function runIndexer(
     .map((r) => ({ ...r }));
   const exhaustedRetries = index.header.retries.filter((r) => r.attempts >= maxRetryAttempts);
 
+  let budget = options.maxItems ?? Infinity;
   for (const chain of subgraph.chains()) {
     const since = checkpoints[chain] ?? 0;
     const requests = await subgraph.fetchClaimRequestsSince(chain, since);
     log.info(`${chain}: ${requests.length} new claim requests since ${since}`);
     for (const req of requests) {
-      // Advance the checkpoint over every fetched request — even known
-      // duplicates — so the next run's `creationTime_gt` skips them.
+      if (known.has(req.requestId)) {
+        // Advance the checkpoint over already-indexed duplicates so the next
+        // run's `creationTime_gt` skips them.
+        checkpoints[chain] = Math.max(checkpoints[chain] ?? 0, req.creationTime);
+        continue;
+      }
+      // Out of budget: leave this and every later (newer) request for the next
+      // run by NOT advancing the checkpoint past them. Requests are ascending
+      // by creationTime, so breaking here keeps the run resumable.
+      if (budget <= 0) break;
       checkpoints[chain] = Math.max(checkpoints[chain] ?? 0, req.creationTime);
-      if (known.has(req.requestId)) continue;
       known.add(req.requestId);
       work.push({
         chain,
@@ -103,6 +118,7 @@ export async function runIndexer(
         evidenceUri: req.evidenceUri,
         attempts: 0,
       });
+      budget--;
     }
   }
 

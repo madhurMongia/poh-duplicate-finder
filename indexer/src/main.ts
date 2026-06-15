@@ -1,11 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  DEFAULT_BLOB_STORE_NAME,
   DEFAULT_INDEX_BLOB_KEY,
   IpfsClient,
-  NetlifyBlobStore,
   OnnxFacePipeline,
+  resolveBlobStore,
   runIndexer,
   SubgraphClient,
   type ChainId,
@@ -45,13 +44,16 @@ async function main(): Promise<void> {
     recognition: new Uint8Array(recognition),
   });
 
+  // Local dev (BLOB_DIR set) writes to the filesystem and needs no Netlify
+  // credentials; the cloud path requires the site id + token.
+  const blobs = resolveBlobStore(process.env, {
+    siteID: process.env.BLOB_DIR ? undefined : requireEnv('NETLIFY_SITE_ID'),
+    token: process.env.BLOB_DIR ? undefined : requireEnv('NETLIFY_AUTH_TOKEN'),
+  });
+
   const summary = await runIndexer(
     {
-      blobs: new NetlifyBlobStore({
-        name: process.env.BLOB_STORE_NAME ?? DEFAULT_BLOB_STORE_NAME,
-        siteID: requireEnv('NETLIFY_SITE_ID'),
-        token: requireEnv('NETLIFY_AUTH_TOKEN'),
-      }),
+      blobs,
       subgraph: new SubgraphClient(subgraphEndpoints()),
       ipfs: new IpfsClient({ timeoutMs: 15_000 }),
       pipeline,
@@ -63,6 +65,7 @@ async function main(): Promise<void> {
     {
       blobKey: process.env.INDEX_BLOB_KEY ?? DEFAULT_INDEX_BLOB_KEY,
       bootstrap: mode === 'bootstrap',
+      maxItems: process.env.INDEXER_MAX_ITEMS ? Number(process.env.INDEXER_MAX_ITEMS) : undefined,
     },
   );
 

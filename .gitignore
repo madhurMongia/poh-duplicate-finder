@@ -2,8 +2,12 @@ node_modules/
 dist/
 coverage/
 models/
+.localblobs/
 .netlify/
 .env
 .env.*
 *.local
 .DS_Store
+
+# transient local logs
+*.log

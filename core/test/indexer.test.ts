@@ -111,6 +111,34 @@ describe('runIndexer', () => {
     expect((await readIndex(blobs)).header.entries).toHaveLength(2);
   });
 
+  it('caps new work with maxItems and resumes the remainder next run', async () => {
+    const { deps, blobs } = fixtures();
+    // Only the oldest new request (r1@100) should be processed; the checkpoint
+    // must not advance past it, leaving r2/r3 for later.
+    const first = await runIndexer(deps, { maxItems: 1 });
+    expect(first).toMatchObject({ total: 1, added: 1 });
+    expect(first.checkpoints.gnosis).toBe(100);
+    expect((await readIndex(blobs)).header.entries.map((e) => e.requestId)).toEqual(['0xr1']);
+
+    // Uncapped follow-up resumes from the checkpoint and attempts r2/r3. Both
+    // fail this run (r2's photo fails once, r3 has no face), so they land in
+    // the retry list rather than as entries.
+    const second = await runIndexer(deps);
+    expect(second.checkpoints.gnosis).toBe(300);
+    expect(second.added).toBe(0);
+    expect((await readIndex(blobs)).header.retries.map((r) => r.requestId).sort()).toEqual([
+      '0xr2',
+      '0xr3',
+    ]);
+
+    // A third run recovers r2 now that its one-shot failure has cleared.
+    await runIndexer(deps);
+    expect((await readIndex(blobs)).header.entries.map((e) => e.requestId)).toEqual([
+      '0xr1',
+      '0xr2',
+    ]);
+  });
+
   it('stops retrying after maxRetryAttempts but keeps the failure on record', async () => {
     const { deps, blobs, pipeline } = fixtures();
     const stale = emptyIndex(pipeline.modelId);

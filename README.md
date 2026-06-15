@@ -53,7 +53,29 @@ npm run indexer -- update     # incremental index run (needs env, see below)
 npm run indexer -- bootstrap  # full rebuild
 ```
 
-Local dev: `npm run build -w core && netlify dev` (serves the SPA + functions on :8888).
+### Local dev (no Netlify account needed)
+
+Set `BLOB_DIR` to use a filesystem-backed blob store that the indexer and the
+lookup function both read, so the whole stack runs locally:
+
+```bash
+export BLOB_DIR="$PWD/.localblobs"
+export MAINNET_SUBGRAPH_URL=… GNOSIS_SUBGRAPH_URL=…   # for profile lookups
+export ORT_WASM_DIR="$PWD/node_modules/onnxruntime-web/dist/"
+
+npm run build -w core
+npm run models:download                 # ONNX models -> ./models
+npm run models:upload                   # seed them into $BLOB_DIR
+INDEXER_MAX_ITEMS=300 npm run indexer -- bootstrap   # small index, ~2 min
+npm run build -w web
+npx tsx scripts/dev-server.ts           # http://localhost:8888
+```
+
+`scripts/dev-server.ts` is a dev-only server (Netlify serves the real thing in
+prod); it serves `web/dist` and routes `/api/*` to the function handlers,
+sidestepping `netlify dev`'s monorepo prompt and bundler. `INDEXER_MAX_ITEMS`
+caps how many new photos the indexer embeds per run (omit for a full build —
+note the full registry is ~24k requests and takes hours, IPFS-bound).
 
 Git hooks: husky runs lint + typecheck + tests on every commit (installed via `npm install`'s
 `prepare` script; the hook sources nvm to pick up the repo's Node 20).

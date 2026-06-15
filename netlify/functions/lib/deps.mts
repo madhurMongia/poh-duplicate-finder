@@ -1,19 +1,19 @@
 import {
   createCachedIndexLoader,
-  DEFAULT_BLOB_STORE_NAME,
   DEFAULT_INDEX_BLOB_KEY,
   IpfsClient,
   MODEL_BLOB_KEYS,
-  NetlifyBlobStore,
   OnnxFacePipeline,
+  resolveBlobStore,
   SubgraphClient,
+  type BlobStore,
   type ChainId,
   type LookupDeps,
 } from '@pohdf/core';
 import { ortWebSessionProvider } from './ortWebSession.mjs';
 
-export function createBlobStore(): NetlifyBlobStore {
-  return new NetlifyBlobStore({ name: process.env.BLOB_STORE_NAME ?? DEFAULT_BLOB_STORE_NAME });
+export function createBlobStore(): BlobStore {
+  return resolveBlobStore(process.env);
 }
 
 export function indexBlobKey(): string {
