@@ -1,20 +1,20 @@
 import { EMBEDDING_DIMS } from './constants.js';
 import type { FaceEntry, FaceIndex, IndexHeader } from './types.js';
 
-/** 'PDX1' — PoH Duplicate-finder indeX, format v1. */
-const MAGIC = 0x31584450;
+/** 'PDX2' — PoH Duplicate-finder indeX, binary format v2 (float32 vectors). */
+const MAGIC = 0x32584450;
 const PREAMBLE_BYTES = 8; // magic u32 + header length u32, both little-endian
 
 /**
  * Binary layout (single self-contained blob, atomic to readers):
  *   u32 magic | u32 headerLen | headerJson (padded to 4 bytes) |
- *   f32 scales[count] | i8 vectors[count * dims]
- * Vectors are int8-quantized per row with a float32 scale (max-abs / 127).
+ *   f32 vectors[count * dims]   (little-endian, row-major)
  *
- * Why int8 is safe here: quantization error is at most scale/2 ≈ maxAbs/254
- * per component — orders of magnitude below the cosine-score gap between
- * same-person and different-person pairs — and rows are renormalized to unit
- * length on decode. The payoff is a 4x smaller blob (~512 B per face).
+ * Vectors are stored as raw float32. The index is only ever read server-side
+ * (the lookup function loads it once and caches it across warm invocations),
+ * so int8 quantization's ~4x size saving isn't worth the extra machinery.
+ * Embeddings are L2-normalized at embed time, so ranking's dot product is a
+ * true cosine — the codec stays a dumb (de)serializer.
  */
 export function encodeIndex(index: FaceIndex): Uint8Array {
   const { header, vectors } = index;
@@ -31,27 +31,15 @@ export function encodeIndex(index: FaceIndex): Uint8Array {
     headerJson = padded;
   }
 
-  const total = PREAMBLE_BYTES + headerJson.length + count * 4 + count * dims;
-  const out = new Uint8Array(total);
+  const out = new Uint8Array(PREAMBLE_BYTES + headerJson.length + vectors.length * 4);
   const view = new DataView(out.buffer);
   view.setUint32(0, MAGIC, true);
   view.setUint32(4, headerJson.length, true);
   out.set(headerJson, PREAMBLE_BYTES);
 
-  const scalesOffset = PREAMBLE_BYTES + headerJson.length;
-  const vectorsOffset = scalesOffset + count * 4;
-  for (let row = 0; row < count; row++) {
-    let maxAbs = 0;
-    for (let d = 0; d < dims; d++) {
-      const v = Math.abs(vectors[row * dims + d]);
-      if (v > maxAbs) maxAbs = v;
-    }
-    const scale = maxAbs === 0 ? 1 : maxAbs / 127;
-    view.setFloat32(scalesOffset + row * 4, scale, true);
-    for (let d = 0; d < dims; d++) {
-      const q = Math.max(-127, Math.min(127, Math.round(vectors[row * dims + d] / scale)));
-      view.setInt8(vectorsOffset + row * dims + d, q);
-    }
+  const vectorsOffset = PREAMBLE_BYTES + headerJson.length;
+  for (let i = 0; i < vectors.length; i++) {
+    view.setFloat32(vectorsOffset + i * 4, vectors[i], true);
   }
   return out;
 }
@@ -73,25 +61,15 @@ export function decodeIndex(bytes: Uint8Array): FaceIndex {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const headerLen = view.getUint32(4, true);
   const { count, dims } = header;
-  const scalesOffset = PREAMBLE_BYTES + headerLen;
-  const vectorsOffset = scalesOffset + count * 4;
-  if (bytes.length < vectorsOffset + count * dims) throw new Error('decodeIndex: truncated body');
+  const vectorsOffset = PREAMBLE_BYTES + headerLen;
+  const floatCount = count * dims;
+  // DataView reads (vs a Float32Array view) tolerate an unaligned offset and
+  // pin little-endian, so the blob decodes identically on any host.
+  if (bytes.length < vectorsOffset + floatCount * 4) throw new Error('decodeIndex: truncated body');
 
-  const vectors = new Float32Array(count * dims);
-  for (let row = 0; row < count; row++) {
-    const scale = view.getFloat32(scalesOffset + row * 4, true);
-    const base = row * dims;
-    let sumSq = 0;
-    for (let d = 0; d < dims; d++) {
-      const v = view.getInt8(vectorsOffset + base + d) * scale;
-      vectors[base + d] = v;
-      sumSq += v * v;
-    }
-    // Renormalize in place to erase quantization scale error; ranking assumes unit rows.
-    const norm = Math.sqrt(sumSq);
-    if (norm > 0) {
-      for (let d = 0; d < dims; d++) vectors[base + d] /= norm;
-    }
+  const vectors = new Float32Array(floatCount);
+  for (let i = 0; i < floatCount; i++) {
+    vectors[i] = view.getFloat32(vectorsOffset + i * 4, true);
   }
   return { header, vectors };
 }

@@ -1,6 +1,6 @@
 import type { BlobStore } from './blobstore.js';
 import { appendToIndex, decodeIndex, emptyIndex, encodeIndex } from './codec.js';
-import { DEFAULT_INDEX_BLOB_KEY, EMBEDDING_DIMS } from './constants.js';
+import { DEFAULT_INDEX_BLOB_KEY } from './constants.js';
 import type { IpfsJsonApi } from './photos.js';
 import { fetchRegistrationPhoto } from './photos.js';
 import type { FacePipeline } from './pipeline.js';
@@ -71,7 +71,7 @@ export async function runIndexer(
   const blobKey = options.blobKey ?? DEFAULT_INDEX_BLOB_KEY;
   const maxRetryAttempts = options.maxRetryAttempts ?? 5;
 
-  let index = emptyIndex(pipeline.modelId, EMBEDDING_DIMS);
+  let index = emptyIndex(pipeline.modelId, pipeline.embeddingDims);
   if (!options.bootstrap) {
     const existing = await blobs.get(blobKey);
     if (existing) index = decodeIndex(existing);

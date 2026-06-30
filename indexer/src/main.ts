@@ -1,15 +1,12 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import {
   DEFAULT_INDEX_BLOB_KEY,
+  HumanFacePipeline,
   IpfsClient,
-  OnnxFacePipeline,
   resolveBlobStore,
   runIndexer,
   SubgraphClient,
   type ChainId,
 } from '@pohdf/core';
-import { nodeSessionProvider } from './nodeSession.js';
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -33,16 +30,7 @@ async function main(): Promise<void> {
     throw new Error(`unknown mode '${mode}'; expected 'update' or 'bootstrap'`);
   }
 
-  const modelsDir = process.env.MODELS_DIR ?? 'models';
-  const [detection, recognition] = await Promise.all([
-    readFile(path.join(modelsDir, 'det_500m.onnx')),
-    readFile(path.join(modelsDir, 'w600k_mbf.onnx')),
-  ]);
-
-  const pipeline = await OnnxFacePipeline.create(nodeSessionProvider, {
-    detection: new Uint8Array(detection),
-    recognition: new Uint8Array(recognition),
-  });
+  const pipeline = await HumanFacePipeline.create();
 
   // Local dev (BLOB_DIR set) writes to the filesystem and needs no Netlify
   // credentials; the cloud path requires the site id + token.

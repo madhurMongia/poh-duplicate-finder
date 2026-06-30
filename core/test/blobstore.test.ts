@@ -35,8 +35,8 @@ describe('FileBlobStore', () => {
   it('round-trips binary content, creating nested key directories', async () => {
     const store = new FileBlobStore(dir);
     const value = new Uint8Array([0, 255, 7, 42]);
-    await store.set('models/det_500m.onnx', value);
-    expect(Array.from((await store.get('models/det_500m.onnx'))!)).toEqual([0, 255, 7, 42]);
+    await store.set('index/test', value);
+    expect(Array.from((await store.get('index/test'))!)).toEqual([0, 255, 7, 42]);
   });
 
   it('overwrites atomically and leaves no temp files behind', async () => {

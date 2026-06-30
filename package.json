@@ -18,13 +18,10 @@
     "test:watch": "vitest",
     "knip": "knip",
     "prepare": "husky",
-    "indexer": "npm run start -w indexer --",
-    "models:download": "tsx scripts/download-models.ts",
-    "models:upload": "tsx scripts/upload-models.ts"
+    "indexer": "npm run start -w indexer --"
   },
   "dependencies": {
-    "@pohdf/core": "*",
-    "onnxruntime-web": "^1.20.1"
+    "@pohdf/core": "*"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
@@ -34,7 +31,6 @@
     "husky": "^9.1.7",
     "knip": "^5.88.1",
     "prettier": "^3.4.2",
-    "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.1",
     "vitest": "^2.1.8"

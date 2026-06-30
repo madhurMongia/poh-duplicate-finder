@@ -31,14 +31,14 @@ candidates with scores; a human decides whether to file a challenge.
 ## 3. Architecture
 
 ```
-GitHub Actions (cron ~30 min)         Netlify
-┌───────────────────────────┐    ┌──────────────────────────────┐
-│ indexer (Node, ORT native)│───▶│ Blobs: index blob + models   │
-│ subgraph Δ → IPFS → embed │    │            ▲                 │
-└───────────────────────────┘    │  /api/lookup (ORT WASM)      │
-                                 │            ▲                 │
-                                 │  static SPA (upload/address) │
-                                 └──────────────────────────────┘
+GitHub Actions (cron ~30 min)          Netlify
+┌────────────────────────────┐    ┌──────────────────────────────┐
+│ indexer (Node, Human/TF.js)│───▶│ Blobs: index blob            │
+│ subgraph Δ → IPFS → embed  │    │            ▲                 │
+└────────────────────────────┘    │  /api/lookup (Human/TF.js)   │
+                                  │            ▲                 │
+                                  │  static SPA (upload/address) │
+                                  └──────────────────────────────┘
 ```
 
 Division of labor:
@@ -47,43 +47,38 @@ Division of labor:
   is the right home for a batch ML job (no bundle-size limit, 6h max runtime,
   free on public repos). GH cron is imprecise (5-min floor, often delayed) but
   that is irrelevant at our freshness requirement.
-- **Netlify Blobs = storage.** The index and the ONNX model files. Blob writes
-  need no redeploy and cost nothing.
+- **Netlify Blobs = storage.** The index blob. Blob writes need no redeploy
+  and cost nothing.
 - **Netlify function = per-query inference.** Embedding a single face fits a
-  lambda comfortably (~1–2s warm). The WASM build of onnxruntime avoids native
-  binary bundle-size problems.
+  lambda comfortably (~1–2s warm). Human runs through the TensorFlow.js WASM
+  backend and ships its model assets with the function bundle.
 - **Static SPA = pure UI.** No model download, no WASM in the browser; works
   on phones.
 
 ## 4. ML pipeline
 
-Standard four-stage pipeline, implemented once in `core/` and shared by the
+Three-stage pipeline, implemented once in `core/` and shared by the
 indexer and the lookup function:
 
-1. **Detect** — SCRFD (~2.5MB ONNX) finds the face box + 5 landmarks.
-2. **Align** — similarity transform to the canonical 112×112 ArcFace crop.
-3. **Embed** — MobileFaceNet `w600k_mbf` (insightface, ~13MB ONNX) produces a
-   512-d vector, L2-normalized.
-4. **Compare** — cosine similarity (dot product of normalized vectors).
+1. **Detect** — `@vladmandic/human` BlazeFace finds the face.
+2. **Embed** — Human FaceRes produces a 1024-d descriptor.
+3. **Compare** — cosine similarity (dot product of descriptors).
    Brute-force over ~10k vectors is <10ms in JS typed arrays; no ANN index.
 
-**Hard rule:** the indexer and the lookup function must use the **same model
-files and alignment code** — embeddings from different models are
-incompatible. `core/` is the single source of truth; a CI parity test embeds a
-fixture photo with both `onnxruntime-node` (indexer) and ORT-WASM (function)
-and asserts cosine > 0.999.
+**Hard rule:** the indexer and the lookup function must use the **same Human
+version/config** — embeddings from different model pipelines are incompatible.
+`core/` is the single source of truth.
 
 **Score bands** (initial, to be calibrated empirically — see Testing):
 
-| Cosine | Meaning |
-|---|---|
-| > ~0.55 | Likely same person |
-| ~0.40–0.55 | Needs human review |
-| < ~0.40 | Probably different people |
+| Cosine     | Meaning                   |
+| ---------- | ------------------------- |
+| > ~0.46    | Likely same person        |
+| ~0.40–0.46 | Needs human review        |
+| < ~0.40    | Probably different people |
 
 Future upgrade path: since no browser downloads the model, swapping to a
-larger embedder (e.g. ResNet-50 ArcFace, ~166MB, pulled from Blobs into
-function memory) requires only a full index rebuild — no architecture change.
+different embedder requires only a full index rebuild — no architecture change.
 
 ## 5. The index
 
@@ -93,9 +88,10 @@ One self-contained binary blob in Netlify Blobs:
   numbers, build timestamp, retry list (failed photos with attempt counts),
   and one metadata entry per face: humanity ID, chain, request ID, status,
   photo CID, registration timestamp.
-- Followed by an `N × 512` **int8** matrix with per-vector float32 scales
-  (~512 bytes/face → ~5MB at 10k faces; quantization noise is far below the
-  same/different-person gap).
+- Followed by an `N × 1024` **float32** matrix, row-major (~4KB/face → ~40MB at
+  10k faces). The index is read only server-side (the lookup function loads it
+  once and caches it), so raw float32 is kept for simplicity rather than
+  quantizing. Embeddings are L2-normalized at embed time, so ranking is cosine.
 
 **Indexing policy:**
 
@@ -104,7 +100,7 @@ One self-contained binary blob in Netlify Blobs:
   exactly what catches re-registrations under a new address. **Entries are
   never deleted.**
 - Each entry carries a status (`registered / pending / expired / revoked /
-  rejected / withdrawn`), refreshed every run via one bulk subgraph query
+rejected / withdrawn`), refreshed every run via one bulk subgraph query
   (metadata only — no IPFS, no ML).
 - Photo resolution follows the same chain the v2 web app uses:
   request → evidence URI → registration JSON → photo URI on IPFS.
@@ -170,8 +166,8 @@ poh-duplicate-finder/
   package.json
   core/                # shared: face pipeline, index codec, subgraph client,
                        # IPFS fetcher with gateway fallback
-  indexer/             # CLI (onnxruntime-node), modes: bootstrap | update
-  netlify/functions/   # lookup.ts (ORT WASM)
+  indexer/             # CLI, modes: bootstrap | update
+  netlify/functions/   # lookup/status API
   web/                 # Vite React SPA
   .github/workflows/index.yml   # cron */30 + workflow_dispatch
   docs/superpowers/specs/       # this document
@@ -184,19 +180,17 @@ poh-duplicate-finder/
   printed to the Actions log.
 - **Lookup:** typed errors the UI renders: `NO_FACE`, `PROFILE_NOT_FOUND`,
   `PHOTO_FETCH_FAILED`, `INDEX_UNAVAILABLE`.
-- **Model drift:** the node/WASM parity test in CI is the guard against the
-  indexer and function silently diverging.
+- **Model drift:** `MODEL_ID` changes force a bootstrap rebuild instead of
+  mixing incompatible descriptors.
 - **GH Actions cron disablement** (60 days of repo inactivity disables
   scheduled workflows): accepted risk for v1; a keepalive can be added later.
 
 ## 10. Testing
 
-- **Unit:** index codec round-trip + quantization error bounds; ranking;
+- **Unit:** index codec round-trip (exact float32); ranking;
   subgraph response parsing against recorded fixtures.
 - **Integration:** indexer bootstrap against fixture subgraph/IPFS data;
   lookup function exercised via `netlify dev` against a tiny fixture index.
-- **Parity:** same fixture photo embedded via onnxruntime-node and ORT-WASM,
-  cosine > 0.999.
 - **Calibration:** a small ground-truth set — known same-person pairs from
   public resolved duplicate challenges vs. random distinct pairs — pins the
   real score bands for the UI and regression-tests the whole ML pipeline.

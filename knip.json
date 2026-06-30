@@ -1,5 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
+  "ignoreDependencies": ["@tensorflow/tfjs-converter"],
   "workspaces": {
     ".": {
       "entry": ["scripts/*.ts", "netlify/functions/*.mts"],

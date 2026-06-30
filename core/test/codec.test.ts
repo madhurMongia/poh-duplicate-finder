@@ -49,15 +49,15 @@ describe('encodeIndex / decodeIndex', () => {
     expect(decoded.header).toEqual(sampleIndex().header);
   });
 
-  it('round-trips vectors within quantization tolerance, renormalized', () => {
+  it('round-trips vectors exactly as float32', () => {
     const original = sampleIndex();
     const decoded = decodeIndex(encodeIndex(original));
     for (let row = 0; row < 3; row++) {
       const a = original.vectors.subarray(row * DIMS, (row + 1) * DIMS);
       const b = decoded.vectors.subarray(row * DIMS, (row + 1) * DIMS);
-      expect(cosine(new Float32Array(a), new Float32Array(b))).toBeGreaterThan(0.9995);
-      expect(cosine(new Float32Array(b), new Float32Array(b))).toBeCloseTo(1, 5);
-      for (let d = 0; d < DIMS; d++) expect(Math.abs(a[d] - b[d])).toBeLessThan(0.01);
+      for (let d = 0; d < DIMS; d++) expect(b[d]).toBeCloseTo(a[d], 6);
+      // Inputs are unit vectors, so a faithful round-trip is also unit length.
+      expect(cosine(new Float32Array(b), new Float32Array(b))).toBeCloseTo(1, 6);
     }
   });
 

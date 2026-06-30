@@ -1,4 +1,3 @@
-import { l2Normalize } from '../src/arcface.js';
 import { EMBEDDING_DIMS } from '../src/constants.js';
 import type { IpfsJsonApi } from '../src/photos.js';
 import type { EmbedResult, FacePipeline } from '../src/pipeline.js';
@@ -53,6 +52,16 @@ export function mixedVector(weights: Record<number, number>, dims = EMBEDDING_DI
   return l2Normalize(v);
 }
 
+function l2Normalize(v: Float32Array): Float32Array {
+  let sum = 0;
+  for (let i = 0; i < v.length; i++) sum += v[i] * v[i];
+  const norm = Math.sqrt(sum);
+  if (norm === 0) return new Float32Array(v.length);
+  const out = new Float32Array(v.length);
+  for (let i = 0; i < v.length; i++) out[i] = v[i] / norm;
+  return out;
+}
+
 export function makeEntry(overrides: Partial<FaceEntry> = {}): FaceEntry {
   return {
     humanityId: '0x' + '1'.repeat(40),
@@ -68,11 +77,13 @@ export function makeEntry(overrides: Partial<FaceEntry> = {}): FaceEntry {
 /** Pipeline keyed by the UTF-8 content of the photo bytes. */
 export class FakePipeline implements FacePipeline {
   readonly modelId: string;
+  readonly embeddingDims: number;
   readonly calls: string[] = [];
   private readonly results = new Map<string, EmbedResult>();
 
-  constructor(modelId = 'fake-model@1') {
+  constructor(modelId = 'fake-model@1', embeddingDims = EMBEDDING_DIMS) {
     this.modelId = modelId;
+    this.embeddingDims = embeddingDims;
   }
 
   on(photoKey: string, result: EmbedResult): this {

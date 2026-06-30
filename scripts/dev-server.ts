@@ -5,7 +5,7 @@
  * function handlers, adapting Node's req/res to the Web Request/Response the
  * handlers expect. Avoids `netlify dev`'s monorepo prompt and esbuild bundling.
  *
- * Run: set BLOB_DIR + subgraph URLs + ORT_WASM_DIR, then `tsx scripts/dev-server.ts`.
+ * Run: set BLOB_DIR + subgraph URLs, then `tsx scripts/dev-server.ts`.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -50,7 +50,9 @@ async function serveStatic(res: ServerResponse, pathname: string): Promise<void>
   const rel = pathname === '/' || !path.extname(pathname) ? 'index.html' : pathname.slice(1);
   try {
     const body = await readFile(path.join(DIST, rel));
-    res.writeHead(200, { 'Content-Type': CONTENT_TYPES[path.extname(rel)] ?? 'application/octet-stream' });
+    res.writeHead(200, {
+      'Content-Type': CONTENT_TYPES[path.extname(rel)] ?? 'application/octet-stream',
+    });
     res.end(body);
   } catch {
     res.writeHead(404).end('not found');

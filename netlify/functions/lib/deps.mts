@@ -1,16 +1,14 @@
 import {
   createCachedIndexLoader,
   DEFAULT_INDEX_BLOB_KEY,
+  HumanFacePipeline,
   IpfsClient,
-  MODEL_BLOB_KEYS,
-  OnnxFacePipeline,
   resolveBlobStore,
   SubgraphClient,
   type BlobStore,
   type ChainId,
   type LookupDeps,
 } from '@pohdf/core';
-import { ortWebSessionProvider } from './ortWebSession.mjs';
 
 export function createBlobStore(): BlobStore {
   return resolveBlobStore(process.env);
@@ -33,13 +31,6 @@ export function getLookupDeps(): Promise<LookupDeps> {
 
 async function build(): Promise<LookupDeps> {
   const blobs = createBlobStore();
-  const [detection, recognition] = await Promise.all([
-    blobs.get(MODEL_BLOB_KEYS.detection),
-    blobs.get(MODEL_BLOB_KEYS.recognition),
-  ]);
-  if (!detection || !recognition) {
-    throw new Error('ONNX models missing from blob store; run `npm run models:upload`');
-  }
   const endpoints: Partial<Record<ChainId, string>> = {};
   if (process.env.MAINNET_SUBGRAPH_URL) endpoints.mainnet = process.env.MAINNET_SUBGRAPH_URL;
   if (process.env.GNOSIS_SUBGRAPH_URL) endpoints.gnosis = process.env.GNOSIS_SUBGRAPH_URL;
@@ -48,7 +39,7 @@ async function build(): Promise<LookupDeps> {
     loadIndex: createCachedIndexLoader(blobs, { key: indexBlobKey() }),
     subgraph: new SubgraphClient(endpoints),
     ipfs: new IpfsClient(),
-    pipeline: await OnnxFacePipeline.create(ortWebSessionProvider, { detection, recognition }),
+    pipeline: await HumanFacePipeline.create(),
   };
 }
 
