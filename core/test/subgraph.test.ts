@@ -6,7 +6,10 @@ import {
   type RawRequestStatus,
 } from '../src/subgraph.js';
 
-const ENDPOINT = { gnosis: 'https://subgraph.example/gnosis' };
+const ENDPOINT = {
+  gnosis: 'https://subgraph.example/gnosis',
+  mainnet: 'https://subgraph.example/mainnet',
+};
 
 /** fetch fake returning queued GraphQL payloads in order. */
 function queuedFetch(payloads: unknown[]): typeof fetch {
@@ -18,9 +21,16 @@ function queuedFetch(payloads: unknown[]): typeof fetch {
   }) as typeof fetch;
 }
 
-function gqlRequest(id: string, t: number, uri: string | null, name: string | null = null) {
+function gqlRequest(
+  id: string,
+  t: number,
+  uri: string | null,
+  name: string | null = null,
+  index = 0,
+) {
   return {
     id,
+    index: String(index),
     creationTime: String(t),
     humanity: { id: '0xAA' + id.slice(2).padEnd(38, '0') },
     claimer: { name },
@@ -47,6 +57,48 @@ describe('SubgraphClient.fetchClaimRequestsSince', () => {
     });
     expect(requests[2].evidenceUri).toBeNull();
     expect(requests[2].name).toBeUndefined();
+  });
+
+  it('skips legacy mainnet requests with a negative request index', async () => {
+    const fetchFn = queuedFetch([
+      {
+        data: {
+          requests: [
+            gqlRequest('0xlegacy', 100, '/ipfs/legacy', null, -1),
+            gqlRequest('0xtransfer', 150, null, null, -100),
+            gqlRequest('0xmodern', 200, '/ipfs/modern', null, 0),
+          ],
+        },
+      },
+    ]);
+    const client = new SubgraphClient(ENDPOINT, fetchFn, 500);
+    const requests = await client.fetchClaimRequestsSince('mainnet', 0);
+    expect(requests.map((r) => r.requestId)).toEqual(['0xmodern']);
+  });
+
+  it('keeps legacy-range negative request indexes on gnosis', async () => {
+    const fetchFn = queuedFetch([
+      { data: { requests: [gqlRequest('0xgnosis', 100, '/ipfs/e', null, -1)] } },
+    ]);
+    const client = new SubgraphClient(ENDPOINT, fetchFn, 500);
+    const requests = await client.fetchClaimRequestsSince('gnosis', 0);
+    expect(requests.map((r) => r.requestId)).toEqual(['0xgnosis']);
+  });
+
+  it('skips synthetic transfer requests on gnosis', async () => {
+    const fetchFn = queuedFetch([
+      {
+        data: {
+          requests: [
+            gqlRequest('0xtransfer', 100, null, null, -100),
+            gqlRequest('0xmodern', 200, '/ipfs/modern'),
+          ],
+        },
+      },
+    ]);
+    const client = new SubgraphClient(ENDPOINT, fetchFn, 500);
+    const requests = await client.fetchClaimRequestsSince('gnosis', 0);
+    expect(requests.map((r) => r.requestId)).toEqual(['0xmodern']);
   });
 
   it('wraps GraphQL and HTTP failures in SubgraphError', async () => {
@@ -112,6 +164,43 @@ describe('SubgraphClient.resolveProfile', () => {
       name: 'ada',
       evidenceUri: '/ipfs/e9',
     });
+  });
+
+  it('does not resolve legacy mainnet profiles', async () => {
+    const legacyPayload = {
+      data: {
+        humanity: {
+          id: '0xAAbb000000000000000000000000000000000000',
+          claimerName: 'legacy',
+          requests: [gqlRequest('0xr9', 500, '/ipfs/e9', null, -1)],
+        },
+      },
+    };
+    const client = new SubgraphClient(
+      ENDPOINT,
+      queuedFetch([legacyPayload, { data: { claimer: null } }]),
+    );
+    await expect(
+      client.resolveProfile('mainnet', '0xAABB000000000000000000000000000000000000'),
+    ).resolves.toBeNull();
+  });
+
+  it('resolves past a synthetic transfer request to the latest real evidence', async () => {
+    const payload = {
+      data: {
+        humanity: {
+          id: '0xAAbb000000000000000000000000000000000000',
+          claimerName: 'ada',
+          requests: [
+            gqlRequest('0xtransfer', 600, null, null, -100),
+            gqlRequest('0xr9', 500, '/ipfs/e9'),
+          ],
+        },
+      },
+    };
+    const client = new SubgraphClient(ENDPOINT, queuedFetch([payload]));
+    const profile = await client.resolveProfile('gnosis', '0xAABB000000000000000000000000000000000000');
+    expect(profile?.evidenceUri).toBe('/ipfs/e9');
   });
 
   it('falls back to claimer address resolution', async () => {

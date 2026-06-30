@@ -45,6 +45,7 @@ export class SubgraphError extends Error {
 
 const CLAIM_REQUEST_FIELDS = `
   id
+  index
   creationTime
   humanity { id }
   claimer { name }
@@ -53,6 +54,7 @@ const CLAIM_REQUEST_FIELDS = `
 
 interface GqlClaimRequest {
   id: string;
+  index: string;
   creationTime: string;
   humanity: { id: string };
   claimer: { name: string | null } | null;
@@ -126,6 +128,7 @@ export class SubgraphClient implements SubgraphApi {
       );
       const page = data.requests;
       for (const req of page) {
+        if (shouldSkipClaimRequest(chain, req)) continue;
         if (seen.has(req.id)) continue;
         seen.add(req.id);
         out.push({
@@ -225,14 +228,14 @@ export class SubgraphClient implements SubgraphApi {
             where: { revocation: false }
             orderBy: creationTime
             orderDirection: desc
-            first: 1
+            first: 5
           ) { ${CLAIM_REQUEST_FIELDS} }
         }
       }`,
       { id },
     );
-    if (!data.humanity || data.humanity.requests.length === 0) return null;
-    const latest = data.humanity.requests[0];
+    const latest = data.humanity?.requests.find((req) => !shouldSkipClaimRequest(chain, req));
+    if (!data.humanity || !latest) return null;
     return {
       humanityId: data.humanity.id.toLowerCase(),
       chain,
@@ -240,6 +243,14 @@ export class SubgraphClient implements SubgraphApi {
       evidenceUri: latest.evidenceGroup.evidence[0]?.uri ?? null,
     };
   }
+}
+
+function shouldSkipClaimRequest(chain: ChainId, req: GqlClaimRequest): boolean {
+  const index = Number(req.index);
+  // v2-subgraph creates synthetic transferred-profile rows at index <= -100.
+  // They do not have contract evidence, so there is no face to index there.
+  if (index <= -100) return true;
+  return chain === 'mainnet' && index < 0;
 }
 
 /**

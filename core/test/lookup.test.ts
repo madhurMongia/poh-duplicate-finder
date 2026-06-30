@@ -140,7 +140,11 @@ describe('createCachedIndexLoader', () => {
 describe('parseProfileRef', () => {
   it('extracts a pohId/address from raw input or profile URLs', () => {
     expect(parseProfileRef(`https://v2.proofofhumanity.id/${H1}`)).toBe(H1);
+    expect(parseProfileRef(`https://v2.proofofhumanity.id/${H1.slice(2).toUpperCase()}/gnosis/0`)).toBe(
+      H1,
+    );
     expect(parseProfileRef(H2.toUpperCase())).toBe(H2);
+    expect(parseProfileRef(H3.slice(2).toUpperCase())).toBe(H3);
     expect(parseProfileRef('not a ref')).toBeNull();
   });
 });

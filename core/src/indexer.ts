@@ -147,7 +147,7 @@ export async function runIndexer(
       const { photoUri, bytes } = await fetchRegistrationPhoto(ipfs, item.evidenceUri);
       const result = await pipeline.embedFace(bytes);
       if (!result.ok) {
-        fail(result.message);
+        fail(`${result.message} (${photoUri})`);
         continue;
       }
       newEntries.push({

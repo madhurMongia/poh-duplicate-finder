@@ -66,11 +66,12 @@ export class LookupError extends Error {
 }
 
 const HEX_REF = /^0x[0-9a-f]{40}$/;
+const PROFILE_REF_IN_TEXT = /(?:^|[^0-9a-f])(?:0x)?([0-9a-f]{40})(?![0-9a-f])/i;
 
 /** Pull a profile reference (pohId/address) out of raw user input, e.g. a pasted profile URL. */
 export function parseProfileRef(input: string): string | null {
-  const match = input.toLowerCase().match(/0x[0-9a-f]{40}/);
-  return match ? match[0] : null;
+  const match = input.match(PROFILE_REF_IN_TEXT);
+  return match ? `0x${match[1].toLowerCase()}` : null;
 }
 
 export async function performLookup(
