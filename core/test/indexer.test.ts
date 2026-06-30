@@ -97,6 +97,28 @@ describe('runIndexer', () => {
     ]);
   });
 
+  it('keeps rows that have no registration evidence visible in retries', async () => {
+    const subgraph = new FakeSubgraph(['gnosis']);
+    subgraph.requestsByChain.gnosis = [
+      { requestId: '0xempty', humanityId: H('4'), creationTime: 400, evidenceUri: null },
+    ];
+    const blobs = new InMemoryBlobStore();
+    const deps: IndexerDeps = {
+      blobs,
+      subgraph,
+      ipfs: new FakeIpfs(),
+      pipeline: new FakePipeline(),
+      now: () => 1_000,
+    };
+
+    const summary = await runIndexer(deps);
+    expect(summary).toMatchObject({ total: 0, added: 0, failed: 1, retriesPending: 1 });
+    expect(summary.checkpoints.gnosis).toBe(400);
+    expect((await readIndex(blobs)).header.retries).toEqual([
+      expect.objectContaining({ requestId: '0xempty', lastError: 'no registration evidence' }),
+    ]);
+  });
+
   it('never re-adds known requests when the subgraph repeats them', async () => {
     const { deps, subgraph, blobs } = fixtures();
     await runIndexer(deps);

@@ -49,6 +49,7 @@ const CLAIM_REQUEST_FIELDS = `
   creationTime
   humanity { id }
   claimer { name }
+  status { id }
   evidenceGroup { evidence(first: 1, orderBy: creationTime, orderDirection: asc) { uri } }
 `;
 
@@ -58,6 +59,7 @@ interface GqlClaimRequest {
   creationTime: string;
   humanity: { id: string };
   claimer: { name: string | null } | null;
+  status: { id: string };
   evidenceGroup: { evidence: { uri: string }[] };
 }
 
@@ -73,7 +75,7 @@ export class SubgraphClient implements SubgraphApi {
   constructor(
     private readonly endpoints: Partial<Record<ChainId, string>>,
     private readonly fetchFn: FetchFn = fetch,
-    private readonly pageSize = 500,
+    private readonly pageSize = 1000,
   ) {}
 
   chains(): ChainId[] {
@@ -128,15 +130,16 @@ export class SubgraphClient implements SubgraphApi {
       );
       const page = data.requests;
       for (const req of page) {
-        if (shouldSkipClaimRequest(chain, req)) continue;
+        if (isLegacyMainnetRequest(chain, req)) continue;
         if (seen.has(req.id)) continue;
         seen.add(req.id);
+        const evidence = await this.resolveRequestEvidence(chain, req);
         out.push({
           requestId: req.id,
           humanityId: req.humanity.id.toLowerCase(),
           creationTime: Number(req.creationTime),
-          name: req.claimer?.name ?? undefined,
-          evidenceUri: req.evidenceGroup.evidence[0]?.uri ?? null,
+          name: req.claimer?.name ?? evidence.name ?? undefined,
+          evidenceUri: evidence.uri,
         });
       }
       if (page.length < this.pageSize) return out;
@@ -234,23 +237,78 @@ export class SubgraphClient implements SubgraphApi {
       }`,
       { id },
     );
-    const latest = data.humanity?.requests.find((req) => !shouldSkipClaimRequest(chain, req));
+    const latest = data.humanity?.requests.find((req) => !isLegacyMainnetRequest(chain, req));
     if (!data.humanity || !latest) return null;
+    const evidence = await this.resolveRequestEvidence(chain, latest);
     return {
       humanityId: data.humanity.id.toLowerCase(),
       chain,
-      name: data.humanity.claimerName ?? latest.claimer?.name ?? undefined,
-      evidenceUri: latest.evidenceGroup.evidence[0]?.uri ?? null,
+      name: data.humanity.claimerName ?? latest.claimer?.name ?? evidence.name ?? undefined,
+      evidenceUri: evidence.uri,
     };
+  }
+
+  private async resolveRequestEvidence(
+    chain: ChainId,
+    req: GqlClaimRequest,
+  ): Promise<{ uri: string | null; name?: string }> {
+    const direct = req.evidenceGroup.evidence[0]?.uri ?? null;
+    if (direct || !isTransferArtifactRequest(req)) return { uri: direct };
+
+    const source = await this.resolveTransferSourceRequest(chain, req);
+    return {
+      uri: source?.evidenceGroup.evidence[0]?.uri ?? null,
+      name: source?.claimer?.name ?? undefined,
+    };
+  }
+
+  private async resolveTransferSourceRequest(
+    chain: ChainId,
+    req: GqlClaimRequest,
+  ): Promise<GqlClaimRequest | null> {
+    const foreign = foreignChain(chain);
+    if (!this.endpoints[foreign]) return null;
+
+    const data = await this.query<{
+      humanity: { requests: GqlClaimRequest[] } | null;
+    }>(
+      foreign,
+      `query ($id: ID!) {
+        humanity(id: $id) {
+          requests(
+            where: { revocation: false }
+            orderBy: creationTime
+            orderDirection: asc
+          ) { ${CLAIM_REQUEST_FIELDS} }
+        }
+      }`,
+      { id: req.humanity.id },
+    );
+
+    const withEvidence =
+      data.humanity?.requests.filter((request) => request.evidenceGroup.evidence[0]?.uri) ?? [];
+    const transferred = withEvidence.filter(
+      (request) => request.status.id === 'transferred' || request.status.id === 'transferring',
+    );
+    if (transferred.length > 0) {
+      const transferNumber = Math.max(0, -100 - Number(req.index));
+      return transferred[Math.min(transferNumber, transferred.length - 1)] ?? null;
+    }
+    return withEvidence.at(-1) ?? null;
   }
 }
 
-function shouldSkipClaimRequest(chain: ChainId, req: GqlClaimRequest): boolean {
+function isLegacyMainnetRequest(chain: ChainId, req: GqlClaimRequest): boolean {
   const index = Number(req.index);
-  // v2-subgraph creates synthetic transferred-profile rows at index <= -100.
-  // They do not have contract evidence, so there is no face to index there.
-  if (index <= -100) return true;
-  return chain === 'mainnet' && index < 0;
+  return chain === 'mainnet' && index < 0 && !isTransferArtifactRequest(req);
+}
+
+function isTransferArtifactRequest(req: GqlClaimRequest): boolean {
+  return Number(req.index) <= -100;
+}
+
+function foreignChain(chain: ChainId): ChainId {
+  return chain === 'gnosis' ? 'mainnet' : 'gnosis';
 }
 
 /**

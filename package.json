@@ -18,7 +18,7 @@
     "test:watch": "vitest",
     "knip": "knip",
     "prepare": "husky",
-    "indexer": "npm run start -w indexer --"
+    "indexer": "npm run build -w core && npm run start -w indexer --"
   },
   "dependencies": {
     "@pohdf/core": "*"

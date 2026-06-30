@@ -27,6 +27,7 @@ function gqlRequest(
   uri: string | null,
   name: string | null = null,
   index = 0,
+  status = 'resolved',
 ) {
   return {
     id,
@@ -34,6 +35,7 @@ function gqlRequest(
     creationTime: String(t),
     humanity: { id: '0xAA' + id.slice(2).padEnd(38, '0') },
     claimer: { name },
+    status: { id: status },
     evidenceGroup: { evidence: uri ? [{ uri }] : [] },
   };
 }
@@ -65,7 +67,6 @@ describe('SubgraphClient.fetchClaimRequestsSince', () => {
         data: {
           requests: [
             gqlRequest('0xlegacy', 100, '/ipfs/legacy', null, -1),
-            gqlRequest('0xtransfer', 150, null, null, -100),
             gqlRequest('0xmodern', 200, '/ipfs/modern', null, 0),
           ],
         },
@@ -85,7 +86,7 @@ describe('SubgraphClient.fetchClaimRequestsSince', () => {
     expect(requests.map((r) => r.requestId)).toEqual(['0xgnosis']);
   });
 
-  it('skips synthetic transfer requests on gnosis', async () => {
+  it('hydrates synthetic transfer requests from the foreign chain evidence', async () => {
     const fetchFn = queuedFetch([
       {
         data: {
@@ -95,10 +96,22 @@ describe('SubgraphClient.fetchClaimRequestsSince', () => {
           ],
         },
       },
+      {
+        data: {
+          humanity: {
+            requests: [
+              gqlRequest('0xorigin', 50, '/ipfs/origin', 'Origin Name', -1, 'resolved'),
+              gqlRequest('0xorigin-transfer', 60, '/ipfs/transfer', 'Transfer Name', -2, 'transferred'),
+            ],
+          },
+        },
+      },
     ]);
     const client = new SubgraphClient(ENDPOINT, fetchFn, 500);
     const requests = await client.fetchClaimRequestsSince('gnosis', 0);
-    expect(requests.map((r) => r.requestId)).toEqual(['0xmodern']);
+    expect(requests.map((r) => r.requestId)).toEqual(['0xtransfer', '0xmodern']);
+    expect(requests[0].evidenceUri).toBe('/ipfs/transfer');
+    expect(requests[0].name).toBe('Transfer Name');
   });
 
   it('wraps GraphQL and HTTP failures in SubgraphError', async () => {
@@ -185,20 +198,24 @@ describe('SubgraphClient.resolveProfile', () => {
     ).resolves.toBeNull();
   });
 
-  it('resolves past a synthetic transfer request to the latest real evidence', async () => {
+  it('resolves a synthetic transfer profile from the foreign chain evidence', async () => {
     const payload = {
       data: {
         humanity: {
           id: '0xAAbb000000000000000000000000000000000000',
           claimerName: 'ada',
-          requests: [
-            gqlRequest('0xtransfer', 600, null, null, -100),
-            gqlRequest('0xr9', 500, '/ipfs/e9'),
-          ],
+          requests: [gqlRequest('0xtransfer', 600, null, null, -100)],
         },
       },
     };
-    const client = new SubgraphClient(ENDPOINT, queuedFetch([payload]));
+    const originPayload = {
+      data: {
+        humanity: {
+          requests: [gqlRequest('0xorigin-transfer', 500, '/ipfs/e9', 'Origin Ada', -1, 'transferred')],
+        },
+      },
+    };
+    const client = new SubgraphClient(ENDPOINT, queuedFetch([payload, originPayload]));
     const profile = await client.resolveProfile('gnosis', '0xAABB000000000000000000000000000000000000');
     expect(profile?.evidenceUri).toBe('/ipfs/e9');
   });
