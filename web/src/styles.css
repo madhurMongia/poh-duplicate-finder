@@ -64,10 +64,35 @@ header {
   margin-bottom: 14px;
 }
 
+a.logo-mark {
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+
+a.logo-mark:hover,
+a.logo-mark:focus-visible {
+  border-color: rgba(255, 184, 61, 0.6);
+}
+
 header h1 {
   margin: 0 0 8px;
   font-size: clamp(1.8rem, 4vw, 2.6rem);
   letter-spacing: -0.02em;
+}
+
+.beta-badge {
+  display: inline-block;
+  vertical-align: 0.35em;
+  margin-left: 6px;
+  font-size: 0.4em;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: rgba(148, 155, 170, 0.12);
+  border: 1px solid rgba(148, 155, 170, 0.35);
+  border-radius: 999px;
+  padding: 2px 10px;
 }
 
 .tagline {

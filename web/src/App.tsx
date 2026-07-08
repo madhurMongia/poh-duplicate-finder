@@ -3,6 +3,7 @@ import type { LookupResponse } from '@pohdf/core';
 import { lookupByPhoto, lookupByProfile } from './api';
 import { LookupForm, type LookupRequest } from './components/LookupForm';
 import { ResultsGrid } from './components/ResultsGrid';
+import { ExternalLinkIcon } from './components/ExternalLinkIcon';
 import { StatusFooter } from './components/StatusFooter';
 
 export function App() {
@@ -37,8 +38,17 @@ export function App() {
   return (
     <div className="app">
       <header>
-        <div className="logo-mark">Proof of Humanity</div>
-        <h1>Duplicate Finder</h1>
+        <a
+          className="logo-mark"
+          href="https://v2.proofofhumanity.id"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Proof of Humanity <ExternalLinkIcon />
+        </a>
+        <h1>
+          Duplicate Finder <span className="beta-badge">Beta</span>
+        </h1>
         <p className="tagline">
           Check a photo or a Proof of Humanity v2 profile against every face ever submitted to the
           registry.
