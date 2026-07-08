@@ -2,7 +2,7 @@ name: Index
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '13,43 * * * *'
   workflow_dispatch:
     inputs:
       mode:
