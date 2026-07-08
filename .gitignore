@@ -1,8 +1,8 @@
 node_modules/
-dist/
+**/dist/
 coverage/
 models/
-.localblobs/
+.localblobs*/
 .netlify/
 .env
 .env.*

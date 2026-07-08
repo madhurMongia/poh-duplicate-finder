@@ -67,8 +67,6 @@ export type LookupErrorCode =
 export interface MatchResponse {
   score: number;
   band: ScoreBand;
-  /** True when the match is the query profile itself (same humanity id) — a renewal, not a duplicate. */
-  renewal: boolean;
   humanityId: string;
   chain: ChainId;
   status: EntryStatus;
@@ -81,7 +79,12 @@ export interface MatchResponse {
 export interface LookupResponse {
   ok: true;
   query: {
+    /** Set for profile lookups; absent for raw photo uploads. */
     humanityId?: string;
+    chain?: ChainId;
+    name?: string;
+    photoUri?: string;
+    profileUrl?: string;
     faceCount: number;
     detScore: number;
   };

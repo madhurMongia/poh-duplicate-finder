@@ -19,13 +19,17 @@ export function StatusFooter() {
   return (
     <footer>
       {status ? (
-        <span>
+        <span className="status-pill">
+          <span className="status-dot" aria-hidden />
           {status.count.toLocaleString()} faces indexed · updated {relativeTime(status.builtAt)} ·
           model {status.modelId}
           {status.pendingRetries > 0 && ` · ${status.pendingRetries} photos pending retry`}
         </span>
       ) : (
-        <span>Index status unavailable</span>
+        <span className="status-pill">
+          <span className="status-dot offline" aria-hidden />
+          Index status unavailable
+        </span>
       )}
     </footer>
   );

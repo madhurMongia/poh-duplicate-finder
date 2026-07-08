@@ -2,11 +2,11 @@ import type { BlobStore } from './blobstore.js';
 import { decodeIndex } from './codec.js';
 import { buildProfileUrl, DEFAULT_INDEX_BLOB_KEY, scoreBand } from './constants.js';
 import type { IpfsJsonApi } from './photos.js';
-import { fetchRegistrationPhoto } from './photos.js';
+import { fetchRegistrationPhoto, resolveRegistrationPhotoUri } from './photos.js';
 import type { FacePipeline } from './pipeline.js';
 import { rankMatches } from './ranking.js';
 import type { SubgraphApi } from './subgraph.js';
-import type { FaceIndex, LookupErrorCode, LookupResponse } from './types.js';
+import type { ChainId, FaceIndex, LookupErrorCode, LookupResponse } from './types.js';
 
 /** Resolves the current index, or null when none has been built yet. */
 export type IndexLoader = () => Promise<FaceIndex | null>;
@@ -74,6 +74,51 @@ export function parseProfileRef(input: string): string | null {
   return match ? `0x${match[1].toLowerCase()}` : null;
 }
 
+/** Subgraph + IPFS JSON only — no index, no ML models. */
+export type PreviewDeps = Pick<LookupDeps, 'subgraph' | 'ipfs'>;
+
+export interface ProfilePreview {
+  humanityId: string;
+  chain: ChainId;
+  name?: string;
+  photoUri?: string;
+  profileUrl: string;
+}
+
+/**
+ * Resolve a pohId/address to profile metadata (name, chain, registration
+ * photo uri) without touching the face index or the ML pipeline — cheap
+ * enough to drive a live preview while the user types.
+ */
+export async function resolveProfilePreview(
+  deps: PreviewDeps,
+  ref: string,
+): Promise<ProfilePreview> {
+  const normalized = ref.toLowerCase();
+  if (!HEX_REF.test(normalized)) {
+    throw new LookupError('BAD_REQUEST', 'expected a 0x… pohId or address (40 hex chars)');
+  }
+  for (const chain of deps.subgraph.chains()) {
+    const profile = await deps.subgraph.resolveProfile(chain, normalized);
+    if (!profile) continue;
+    const preview: ProfilePreview = {
+      humanityId: profile.humanityId,
+      chain: profile.chain,
+      name: profile.name,
+      profileUrl: buildProfileUrl(profile.humanityId),
+    };
+    if (profile.evidenceUri) {
+      try {
+        preview.photoUri = await resolveRegistrationPhotoUri(deps.ipfs, profile.evidenceUri);
+      } catch {
+        // Preview stays photo-less; the full lookup surfaces fetch errors.
+      }
+    }
+    return preview;
+  }
+  throw new LookupError('PROFILE_NOT_FOUND', `no PoH v2 profile found for ${normalized}`);
+}
+
 export async function performLookup(
   deps: LookupDeps,
   input: LookupInput,
@@ -83,9 +128,17 @@ export async function performLookup(
 
   const index = await loadIndex();
   if (!index) throw new LookupError('INDEX_UNAVAILABLE', 'face index has not been built yet');
+  if (index.header.modelId !== pipeline.modelId || index.header.dims !== pipeline.embeddingDims) {
+    throw new LookupError(
+      'INDEX_UNAVAILABLE',
+      `face index was built with ${index.header.modelId}/${index.header.dims}d; ` +
+        `run indexer bootstrap for ${pipeline.modelId}/${pipeline.embeddingDims}d`,
+    );
+  }
 
   let photoBytes: Uint8Array;
   let queryHumanityId: string | undefined;
+  let queryProfile: { chain: ChainId; name?: string; photoUri?: string } | undefined;
 
   if (input.kind === 'photo') {
     photoBytes = input.bytes;
@@ -99,18 +152,21 @@ export async function performLookup(
       const profile = await subgraph.resolveProfile(chain, ref);
       if (profile) {
         queryHumanityId = profile.humanityId;
+        queryProfile = { chain: profile.chain, name: profile.name };
         evidenceUri = profile.evidenceUri;
         break;
       }
     }
-    if (!queryHumanityId) {
+    if (!queryHumanityId || !queryProfile) {
       throw new LookupError('PROFILE_NOT_FOUND', `no PoH v2 profile found for ${ref}`);
     }
     if (!evidenceUri) {
       throw new LookupError('PHOTO_FETCH_FAILED', 'profile has no registration evidence');
     }
     try {
-      ({ bytes: photoBytes } = await fetchRegistrationPhoto(ipfs, evidenceUri));
+      const photo = await fetchRegistrationPhoto(ipfs, evidenceUri);
+      photoBytes = photo.bytes;
+      queryProfile.photoUri = photo.photoUri;
     } catch (err) {
       throw new LookupError('PHOTO_FETCH_FAILED', String(err));
     }
@@ -128,13 +184,16 @@ export async function performLookup(
     ok: true,
     query: {
       humanityId: queryHumanityId,
+      chain: queryProfile?.chain,
+      name: queryProfile?.name,
+      photoUri: queryProfile?.photoUri,
+      profileUrl: queryHumanityId ? buildProfileUrl(queryHumanityId) : undefined,
       faceCount: embedded.faceCount,
       detScore: embedded.detScore,
     },
     matches: matches.map((m) => ({
       score: m.score,
       band: scoreBand(m.score),
-      renewal: m.renewal,
       humanityId: m.entry.humanityId,
       chain: m.entry.chain,
       status: m.entry.status,

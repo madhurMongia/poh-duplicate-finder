@@ -15,10 +15,6 @@
   },
   "dependencies": {
     "@netlify/blobs": "^8.1.0",
-    "@tensorflow/tfjs-backend-wasm": "^4.22.0",
-    "@tensorflow/tfjs-converter": "^4.22.0",
-    "@tensorflow/tfjs-core": "^4.22.0",
-    "@vladmandic/human": "^3.3.6",
     "jimp": "^1.6.0"
   }
 }

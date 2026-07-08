@@ -34,14 +34,13 @@ describe('rankMatches', () => {
     expect(rankMatches(unitVector(0, DIMS), index, { topK: 1 })).toHaveLength(1);
   });
 
-  it('flags renewals by humanity id, case-insensitively', () => {
+  it('excludes the query humanity from results, case-insensitively', () => {
     const index = indexOf([unitVector(0, DIMS), unitVector(1, DIMS)], [H1, H2]);
     const matches = rankMatches(unitVector(0, DIMS), index, {
       queryHumanityId: H1.toUpperCase(),
     });
-    expect(matches[0].entry.humanityId).toBe(H1);
-    expect(matches[0].renewal).toBe(true);
-    expect(matches[1].renewal).toBe(false);
+    expect(matches).toHaveLength(1);
+    expect(matches[0].entry.humanityId).toBe(H2);
   });
 
   it('rejects dimension mismatches', () => {

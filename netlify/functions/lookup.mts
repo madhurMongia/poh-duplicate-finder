@@ -8,6 +8,9 @@ import {
 } from '@pohdf/core';
 import { getLookupDeps, jsonResponse } from './lib/deps.mjs';
 
+const MAX_PHOTO_BYTES = 6 * 1024 * 1024;
+const ACCEPTED_PHOTO_TYPES = new Set(['image/jpeg', 'image/png']);
+
 const STATUS_BY_CODE: Record<LookupErrorCode, number> = {
   BAD_REQUEST: 400,
   NO_FACE: 422,
@@ -25,6 +28,12 @@ async function parseLookupInput(req: Request): Promise<LookupInput> {
     const photo = form.get('photo');
     if (!(photo instanceof File)) {
       throw new LookupError('BAD_REQUEST', "multipart field 'photo' is required");
+    }
+    if (!ACCEPTED_PHOTO_TYPES.has(photo.type)) {
+      throw new LookupError('BAD_REQUEST', 'photo must be a JPEG or PNG');
+    }
+    if (photo.size > MAX_PHOTO_BYTES) {
+      throw new LookupError('BAD_REQUEST', 'photo must be 6 MB or smaller');
     }
     return { kind: 'photo', bytes: new Uint8Array(await photo.arrayBuffer()) };
   }

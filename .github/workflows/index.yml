@@ -24,6 +24,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - run: npm run models:download
       - run: npm run build -w core
       - run: npm run indexer -- ${{ github.event.inputs.mode || 'update' }}
         env:

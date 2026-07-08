@@ -4,12 +4,11 @@ export interface RankedMatch {
   entry: FaceEntry;
   /** Cosine similarity in [-1, 1]; vectors are unit-normalized. */
   score: number;
-  /** Same humanity as the query — a renewal, not a duplicate. */
-  renewal: boolean;
 }
 
 export interface RankOptions {
   topK?: number;
+  /** Entries belonging to this humanity are excluded — a profile is never its own duplicate. */
   queryHumanityId?: string;
 }
 
@@ -38,13 +37,12 @@ export function rankMatches(
     scores[row] = dot;
   }
 
-  const order = Array.from({ length: count }, (_, i) => i).sort((a, b) => scores[b] - scores[a]);
-  return order.slice(0, topK).map((row) => {
-    const entry = entries[row];
-    return {
-      entry,
-      score: scores[row],
-      renewal: normalizedQueryId !== undefined && entry.humanityId.toLowerCase() === normalizedQueryId,
-    };
-  });
+  const order = Array.from({ length: count }, (_, i) => i)
+    .filter(
+      (row) =>
+        normalizedQueryId === undefined ||
+        entries[row].humanityId.toLowerCase() !== normalizedQueryId,
+    )
+    .sort((a, b) => scores[b] - scores[a]);
+  return order.slice(0, topK).map((row) => ({ entry: entries[row], score: scores[row] }));
 }

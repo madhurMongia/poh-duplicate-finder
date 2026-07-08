@@ -14,14 +14,18 @@
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "typecheck": "tsc -p core/tsconfig.json --noEmit && tsc -p netlify/tsconfig.json --noEmit && tsc -p indexer/tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
+    "local": "./scripts/local.sh",
     "test": "vitest run",
     "test:watch": "vitest",
     "knip": "knip",
     "prepare": "husky",
-    "indexer": "npm run build -w core && npm run start -w indexer --"
+    "indexer": "npm run build -w core && npm run start -w indexer --",
+    "models:download": "tsx scripts/download-models.ts",
+    "models:upload": "tsx scripts/upload-models.ts"
   },
   "dependencies": {
-    "@pohdf/core": "*"
+    "@pohdf/core": "*",
+    "onnxruntime-web": "^1.20.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
@@ -31,6 +35,7 @@
     "husky": "^9.1.7",
     "knip": "^5.88.1",
     "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.1",
     "vitest": "^2.1.8"

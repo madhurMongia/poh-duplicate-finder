@@ -11,6 +11,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import lookup from '../netlify/functions/lookup.mts';
+import profile from '../netlify/functions/profile.mts';
 import status from '../netlify/functions/status.mts';
 
 const PORT = Number(process.env.PORT ?? 8888);
@@ -26,6 +27,7 @@ const CONTENT_TYPES: Record<string, string> = {
 
 const routes: Record<string, (req: Request) => Promise<Response>> = {
   '/api/lookup': lookup,
+  '/api/profile': profile,
   '/api/status': status,
 };
 

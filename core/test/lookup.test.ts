@@ -10,7 +10,14 @@ import {
   type LookupDeps,
 } from '../src/lookup.js';
 import type { FaceIndex } from '../src/types.js';
-import { buildIndex, FakeIpfs, FakePipeline, FakeSubgraph, makeEntry, unitVector } from './helpers.js';
+import {
+  buildIndex,
+  FakeIpfs,
+  FakePipeline,
+  FakeSubgraph,
+  makeEntry,
+  unitVector,
+} from './helpers.js';
 
 const H1 = '0x' + 'a'.repeat(40);
 const H2 = '0x' + 'b'.repeat(40);
@@ -56,7 +63,6 @@ describe('performLookup with a photo', () => {
       name: 'Bob',
       status: 'expired',
       band: 'likely-same',
-      renewal: false,
       profileUrl: `https://v2.proofofhumanity.id/${H2}`,
     });
     expect(res.matches[0].score).toBeGreaterThan(0.999);
@@ -74,7 +80,7 @@ describe('performLookup with a photo', () => {
 });
 
 describe('performLookup with a profile reference', () => {
-  it('resolves the profile photo and flags the profile itself as a renewal', async () => {
+  it('resolves the profile photo and excludes the profile itself from matches', async () => {
     const { deps, subgraph, ipfs, pipeline } = setup();
     subgraph.profiles.set(H2, {
       humanityId: H2,
@@ -86,8 +92,7 @@ describe('performLookup with a profile reference', () => {
 
     const res = await performLookup(deps, { kind: 'profile', ref: H2.toUpperCase() });
     expect(res.query.humanityId).toBe(H2);
-    expect(res.matches[0]).toMatchObject({ humanityId: H2, renewal: true });
-    expect(res.matches.slice(1).every((m) => !m.renewal)).toBe(true);
+    expect(res.matches.every((m) => m.humanityId !== H2)).toBe(true);
   });
 
   it('fails typed for unknown profiles, malformed refs, and broken photos', async () => {
@@ -113,6 +118,20 @@ describe('performLookup index handling', () => {
     const err = await performLookup(deps, { kind: 'photo', bytes: photo('q') }).catch((e) => e);
     expect(err).toBeInstanceOf(LookupError);
     expect(err.code).toBe('INDEX_UNAVAILABLE');
+  });
+
+  it('fails typed when the index was built with an old model', async () => {
+    const staleIndex = registryIndex();
+    staleIndex.header.modelId = 'old-model@1';
+    const { deps } = setup();
+    deps.loadIndex = async () => staleIndex;
+
+    const err = await performLookup(deps, { kind: 'photo', bytes: photo('q') }).catch((e) => e);
+    expect(err).toBeInstanceOf(LookupError);
+    expect(err).toMatchObject({
+      code: 'INDEX_UNAVAILABLE',
+      message: expect.stringContaining('run indexer bootstrap'),
+    });
   });
 });
 
@@ -140,9 +159,9 @@ describe('createCachedIndexLoader', () => {
 describe('parseProfileRef', () => {
   it('extracts a pohId/address from raw input or profile URLs', () => {
     expect(parseProfileRef(`https://v2.proofofhumanity.id/${H1}`)).toBe(H1);
-    expect(parseProfileRef(`https://v2.proofofhumanity.id/${H1.slice(2).toUpperCase()}/gnosis/0`)).toBe(
-      H1,
-    );
+    expect(
+      parseProfileRef(`https://v2.proofofhumanity.id/${H1.slice(2).toUpperCase()}/gnosis/0`),
+    ).toBe(H1);
     expect(parseProfileRef(H2.toUpperCase())).toBe(H2);
     expect(parseProfileRef(H3.slice(2).toUpperCase())).toBe(H3);
     expect(parseProfileRef('not a ref')).toBeNull();

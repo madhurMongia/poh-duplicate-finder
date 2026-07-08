@@ -37,7 +37,8 @@ export function App() {
   return (
     <div className="app">
       <header>
-        <h1>PoH Duplicate Finder</h1>
+        <div className="logo-mark">Proof of Humanity</div>
+        <h1>Duplicate Finder</h1>
         <p className="tagline">
           Check a photo or a Proof of Humanity v2 profile against every face ever submitted to the
           registry.
@@ -46,7 +47,12 @@ export function App() {
 
       <LookupForm disabled={loading} onSubmit={runLookup} />
 
-      {loading && <p className="info">Searching the registry…</p>}
+      {loading && (
+        <div className="searching">
+          <span className="spinner" aria-hidden />
+          <span>Searching the registry…</span>
+        </div>
+      )}
       {error && <p className="error">{error}</p>}
       {result && <ResultsGrid result={result} queryPhotoUrl={queryPreview} />}
 

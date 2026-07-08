@@ -13,6 +13,9 @@ interface Props {
 }
 
 export function ResultsGrid({ result, queryPhotoUrl }: Props) {
+  const { query } = result;
+  // Uploaded photo preview wins; profile lookups fall back to the registration photo.
+  const targetPhoto = queryPhotoUrl ?? (query.photoUri ? `${IPFS_GATEWAY}${query.photoUri}` : null);
   return (
     <section className="results">
       <div className="results-header">
@@ -27,11 +30,27 @@ export function ResultsGrid({ result, queryPhotoUrl }: Props) {
         </p>
       </div>
       <div className="grid">
-        {queryPhotoUrl && (
+        {targetPhoto && (
           <article className="card query">
-            <img src={queryPhotoUrl} alt="query" />
+            <img src={targetPhoto} alt="query" />
             <div className="card-body">
-              <strong>Query photo</strong>
+              <span className="chip">Your query</span>
+              <strong>{query.name ?? (query.humanityId ? 'Unnamed' : 'Query photo')}</strong>
+              {query.humanityId && (
+                <code title={query.humanityId}>
+                  {query.humanityId.slice(0, 10)}…{query.humanityId.slice(-4)}
+                </code>
+              )}
+              {query.chain && (
+                <div className="meta">
+                  <span className="chip">{query.chain}</span>
+                </div>
+              )}
+              {query.profileUrl && (
+                <a href={query.profileUrl} target="_blank" rel="noreferrer">
+                  View profile ↗
+                </a>
+              )}
             </div>
           </article>
         )}
@@ -44,16 +63,22 @@ export function ResultsGrid({ result, queryPhotoUrl }: Props) {
 }
 
 function MatchCard({ match }: { match: MatchResponse }) {
-  const percent = (match.score * 100).toFixed(1);
+  const percent = Math.max(0, Math.min(100, match.score * 100));
   return (
-    <article className={`card band-${match.band}${match.renewal ? ' renewal' : ''}`}>
-      <img src={`${IPFS_GATEWAY}${match.photoUri}`} alt={match.name ?? match.humanityId} loading="lazy" />
+    <article className={`card band-${match.band}`}>
+      <img
+        src={`${IPFS_GATEWAY}${match.photoUri}`}
+        alt={match.name ?? match.humanityId}
+        loading="lazy"
+      />
       <div className="card-body">
         <div className="score-row">
-          <span className="score">{percent}%</span>
+          <span className="score">{percent.toFixed(1)}%</span>
           <span className={`chip band-chip-${match.band}`}>{BAND_LABEL[match.band]}</span>
         </div>
-        {match.renewal && <span className="chip renewal-chip">Same profile (renewal)</span>}
+        <div className="score-bar" aria-hidden>
+          <span style={{ width: `${percent}%` }} />
+        </div>
         <strong>{match.name ?? 'Unnamed'}</strong>
         <code title={match.humanityId}>
           {match.humanityId.slice(0, 10)}…{match.humanityId.slice(-4)}

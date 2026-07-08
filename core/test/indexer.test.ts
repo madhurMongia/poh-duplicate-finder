@@ -10,7 +10,13 @@ const H = (c: string) => '0x' + c.repeat(40);
 function fixtures() {
   const subgraph = new FakeSubgraph(['gnosis']);
   subgraph.requestsByChain.gnosis = [
-    { requestId: '0xr1', humanityId: H('1'), creationTime: 100, name: 'Ada', evidenceUri: '/ipfs/ev1' },
+    {
+      requestId: '0xr1',
+      humanityId: H('1'),
+      creationTime: 100,
+      name: 'Ada',
+      evidenceUri: '/ipfs/ev1',
+    },
     { requestId: '0xr2', humanityId: H('2'), creationTime: 200, evidenceUri: '/ipfs/ev2' },
     { requestId: '0xr3', humanityId: H('3'), creationTime: 300, evidenceUri: '/ipfs/ev3' },
   ];
@@ -93,7 +99,11 @@ describe('runIndexer', () => {
     expect(index.header.entries.map((e) => e.requestId)).toEqual(['0xr1', '0xr2']);
     expect(index.header.entries[1].status).toBe('rejected'); // lost to a challenger, kept anyway
     expect(index.header.retries).toEqual([
-      expect.objectContaining({ requestId: '0xr3', attempts: 2, lastError: expect.stringContaining('no face') }),
+      expect.objectContaining({
+        requestId: '0xr3',
+        attempts: 2,
+        lastError: expect.stringContaining('no face'),
+      }),
     ]);
   });
 
@@ -182,7 +192,9 @@ describe('runIndexer', () => {
     expect(summary.added).toBe(0);
     expect(pipeline.calls).toHaveLength(0); // exhausted item not reprocessed
     const index = await readIndex(blobs);
-    expect(index.header.retries).toEqual([expect.objectContaining({ requestId: '0xr9', attempts: 5 })]);
+    expect(index.header.retries).toEqual([
+      expect.objectContaining({ requestId: '0xr9', attempts: 5 }),
+    ]);
   });
 
   it('bootstrap ignores the existing index and rebuilds from scratch', async () => {
@@ -199,6 +211,15 @@ describe('runIndexer', () => {
   it('refuses to update an index built with a different model', async () => {
     const { deps, blobs } = fixtures();
     await blobs.set(DEFAULT_INDEX_BLOB_KEY, encodeIndex(emptyIndex('other-model@9')));
+    await expect(runIndexer(deps)).rejects.toThrow(/bootstrap to rebuild/);
+  });
+
+  it('refuses to update an index built with different embedding dimensions', async () => {
+    const { deps, blobs, pipeline } = fixtures();
+    await blobs.set(
+      DEFAULT_INDEX_BLOB_KEY,
+      encodeIndex(emptyIndex(pipeline.modelId, pipeline.embeddingDims + 1)),
+    );
     await expect(runIndexer(deps)).rejects.toThrow(/bootstrap to rebuild/);
   });
 });
