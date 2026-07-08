@@ -5,4 +5,10 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
-  included_files = ["node_modules/onnxruntime-web/dist/*.wasm"]
+  # ort-web loads its wasm backend in two stages: a dynamic import of the
+  # .mjs Emscripten glue, which then instantiates the .wasm. esbuild cannot
+  # trace the dynamic import, so both files must be shipped explicitly.
+  included_files = [
+    "node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs",
+    "node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm",
+  ]
