@@ -28,6 +28,9 @@ jobs:
       - run: npm run build -w core
       - run: npm run indexer -- ${{ github.event.inputs.mode || 'update' }}
         env:
+          # npm workspace scripts run with cwd=indexer/, but models:download
+          # writes to the repo root — pass an absolute path so both agree.
+          MODELS_DIR: ${{ github.workspace }}/models
           MAINNET_SUBGRAPH_URL: ${{ secrets.MAINNET_SUBGRAPH_URL }}
           GNOSIS_SUBGRAPH_URL: ${{ secrets.GNOSIS_SUBGRAPH_URL }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
