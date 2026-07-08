@@ -72,7 +72,8 @@ describe('runIndexer', () => {
     const { deps, blobs } = fixtures();
     const summary = await runIndexer(deps);
 
-    expect(summary).toMatchObject({ total: 1, added: 1, failed: 2 });
+    // r2's photo fetch failed (retryable); r3 had no face (discarded outright).
+    expect(summary).toMatchObject({ total: 1, added: 1, failed: 1, discarded: 1 });
     expect(summary.checkpoints.gnosis).toBe(300);
 
     const index = await readIndex(blobs);
@@ -85,26 +86,22 @@ describe('runIndexer', () => {
       status: 'registered', // refreshed from the snapshot
     });
     expect(index.header.builtAt).toBe(1_000);
-    expect(index.header.retries.map((r) => r.requestId).sort()).toEqual(['0xr2', '0xr3']);
-    expect(index.header.retries.every((r) => r.attempts === 1)).toBe(true);
+    expect(index.header.retries.map((r) => r.requestId)).toEqual(['0xr2']);
+    expect(index.header.retries[0].attempts).toBe(1);
   });
 
-  it('on the next run recovers retryable photos and increments failed attempts', async () => {
-    const { deps, blobs } = fixtures();
+  it('on the next run recovers retryable photos; faceless profiles stay discarded', async () => {
+    const { deps, blobs, pipeline } = fixtures();
     await runIndexer(deps);
     const summary = await runIndexer(deps);
 
-    expect(summary).toMatchObject({ total: 2, added: 1, failed: 1 });
+    expect(summary).toMatchObject({ total: 2, added: 1, failed: 0, discarded: 0 });
     const index = await readIndex(blobs);
     expect(index.header.entries.map((e) => e.requestId)).toEqual(['0xr1', '0xr2']);
     expect(index.header.entries[1].status).toBe('rejected'); // lost to a challenger, kept anyway
-    expect(index.header.retries).toEqual([
-      expect.objectContaining({
-        requestId: '0xr3',
-        attempts: 2,
-        lastError: expect.stringContaining('no face'),
-      }),
-    ]);
+    expect(index.header.retries).toEqual([]);
+    // r3's photo was embedded exactly once; the discard is permanent.
+    expect(pipeline.calls.filter((c) => c === 'p3')).toHaveLength(1);
   });
 
   it('keeps rows that have no registration evidence visible in retries', async () => {
@@ -152,16 +149,13 @@ describe('runIndexer', () => {
     expect(first.checkpoints.gnosis).toBe(100);
     expect((await readIndex(blobs)).header.entries.map((e) => e.requestId)).toEqual(['0xr1']);
 
-    // Uncapped follow-up resumes from the checkpoint and attempts r2/r3. Both
-    // fail this run (r2's photo fails once, r3 has no face), so they land in
-    // the retry list rather than as entries.
+    // Uncapped follow-up resumes from the checkpoint and attempts r2/r3.
+    // r2's photo fails once (queued for retry); r3 has no face (discarded).
     const second = await runIndexer(deps);
     expect(second.checkpoints.gnosis).toBe(300);
     expect(second.added).toBe(0);
-    expect((await readIndex(blobs)).header.retries.map((r) => r.requestId).sort()).toEqual([
-      '0xr2',
-      '0xr3',
-    ]);
+    expect(second.discarded).toBe(1);
+    expect((await readIndex(blobs)).header.retries.map((r) => r.requestId)).toEqual(['0xr2']);
 
     // A third run recovers r2 now that its one-shot failure has cleared.
     await runIndexer(deps);
@@ -201,7 +195,7 @@ describe('runIndexer', () => {
     const { deps, blobs } = fixtures();
     await runIndexer(deps); // photo2's one-shot failure is consumed here
     const summary = await runIndexer(deps, { bootstrap: true });
-    expect(summary).toMatchObject({ total: 2, added: 2, failed: 1 });
+    expect(summary).toMatchObject({ total: 2, added: 2, failed: 0, discarded: 1 });
     expect((await readIndex(blobs)).header.entries.map((e) => e.requestId)).toEqual([
       '0xr1',
       '0xr2',

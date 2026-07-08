@@ -1,5 +1,6 @@
 import type { LookupResponse, MatchResponse } from '@pohdf/core';
 import { IPFS_GATEWAY } from '../api';
+import { ExternalLinkIcon } from './ExternalLinkIcon';
 
 const BAND_LABEL: Record<MatchResponse['band'], string> = {
   'likely-same': 'Likely same person',
@@ -48,7 +49,7 @@ export function ResultsGrid({ result, queryPhotoUrl }: Props) {
               )}
               {query.profileUrl && (
                 <a href={query.profileUrl} target="_blank" rel="noreferrer">
-                  View profile ↗
+                  View profile <ExternalLinkIcon />
                 </a>
               )}
             </div>
@@ -89,7 +90,7 @@ function MatchCard({ match }: { match: MatchResponse }) {
           <span>{new Date(match.createdAt * 1000).toLocaleDateString()}</span>
         </div>
         <a href={match.profileUrl} target="_blank" rel="noreferrer">
-          View profile ↗
+          View profile <ExternalLinkIcon />
         </a>
       </div>
     </article>

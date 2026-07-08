@@ -39,6 +39,8 @@ export interface IndexerSummary {
   total: number;
   added: number;
   failed: number;
+  /** Profiles dropped permanently because their photo contains no detectable face. */
+  discarded: number;
   retriesPending: number;
   checkpoints: Partial<Record<ChainId, number>>;
 }
@@ -155,6 +157,7 @@ export async function runIndexer(
   const newEntries: FaceEntry[] = [];
   const newRows: Float32Array[] = [];
   const failures: RetryItem[] = [];
+  let discarded = 0;
   const newWorkCount = work.length - retryWorkCount;
   if (work.length === 0) {
     log.info('no photos to fetch/embed this run');
@@ -188,6 +191,14 @@ export async function runIndexer(
       const { photoUri, bytes } = await fetchRegistrationPhoto(ipfs, item.evidenceUri);
       const result = await pipeline.embedFace(bytes);
       if (!result.ok) {
+        if (result.code === 'NO_FACE') {
+          // A photo without a detectable face will never grow one — retrying
+          // just burns fetch/embed budget every run, so drop the profile
+          // permanently instead of queueing it.
+          discarded++;
+          log.warn(`${item.chain}/${item.requestId}: ${result.message} (${photoUri}); discarded`);
+          continue;
+        }
         fail(`${result.message} (${photoUri})`);
         continue;
       }
@@ -205,7 +216,10 @@ export async function runIndexer(
       fail(String(err));
     }
   }
-  log.info(`photos done: ${newEntries.length} embedded, ${failures.length} failed`);
+  log.info(
+    `photos done: ${newEntries.length} embedded, ${failures.length} failed, ` +
+      `${discarded} discarded (no face)`,
+  );
 
   index = appendToIndex(index, newEntries, newRows);
 
@@ -236,12 +250,14 @@ export async function runIndexer(
     total: index.header.count,
     added: newEntries.length,
     failed: failures.length,
+    discarded,
     retriesPending: failures.filter((f) => f.attempts < maxRetryAttempts).length,
     checkpoints,
   };
   log.info(
     `index written: ${summary.total} faces (+${summary.added}), ` +
-      `${summary.failed} failures (${summary.retriesPending} will retry)`,
+      `${summary.failed} failures (${summary.retriesPending} will retry), ` +
+      `${summary.discarded} discarded`,
   );
   return summary;
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { fetchProfilePreview, IPFS_GATEWAY, type ProfilePreview } from '../api';
+import { ExternalLinkIcon } from './ExternalLinkIcon';
 
 export type LookupRequest = { kind: 'photo'; photo: File } | { kind: 'profile'; profile: string };
 
@@ -137,7 +138,7 @@ export function LookupForm({ disabled, onSubmit }: Props) {
                   <code>{`${preview.humanityId.slice(0, 10)}…${preview.humanityId.slice(-6)}`}</code>
                 </span>
                 <a href={preview.profileUrl} target="_blank" rel="noreferrer">
-                  View profile ↗
+                  View profile <ExternalLinkIcon />
                 </a>
               </div>
             </div>
