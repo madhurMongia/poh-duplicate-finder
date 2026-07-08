@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { Jimp } from 'jimp';
 import { JimpImageDecoder, letterbox, SCRFD_500M_CONFIG } from '@pohdf/core';
 

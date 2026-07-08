@@ -1,5 +1,4 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import * as ort from 'onnxruntime-node';
 import {
   SubgraphClient, IpfsClient, fetchRegistrationPhoto,
   JimpImageDecoder, letterbox, rgbaToChwFloat, decodeScrfdOutputs,
