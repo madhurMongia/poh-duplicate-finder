@@ -188,6 +188,10 @@ input[type='text']:focus {
   margin-top: 4px;
 }
 
+.dropzone .photo-error {
+  color: var(--danger);
+}
+
 .photo-preview {
   display: flex;
   align-items: center;
@@ -311,29 +315,28 @@ button.primary:disabled {
   cursor: not-allowed;
 }
 
+/* Busy ≠ disabled: keep the button legible while a search is running. */
+button.primary[aria-busy='true']:disabled {
+  opacity: 0.85;
+  cursor: progress;
+}
+
 /* ---------- Feedback ---------- */
 
 .spinner {
+  flex-shrink: 0;
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(26, 20, 8, 0.3);
-  border-top-color: #1a1408;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
 
-.searching {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  justify-content: center;
-  color: var(--muted);
-  margin: 28px 0;
-}
-
-.searching .spinner {
-  border-color: var(--border-strong);
-  border-top-color: var(--accent);
+/* Dark variant for the amber primary button. */
+.spinner-on-accent {
+  border-color: rgba(26, 20, 8, 0.3);
+  border-top-color: #1a1408;
 }
 
 @keyframes spin {
@@ -344,6 +347,12 @@ button.primary:disabled {
 
 .info {
   color: var(--muted);
+}
+
+.empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 28px 0;
 }
 
 .warn {
@@ -550,6 +559,24 @@ footer {
 
 .status-dot.offline {
   background: var(--danger);
+}
+
+.status-dot.pending {
+  background: var(--muted);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner,
+  .status-dot.pending {
+    animation-duration: 2s;
+  }
 }
 
 @media (max-width: 560px) {

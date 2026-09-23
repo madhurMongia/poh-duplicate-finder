@@ -1,23 +1,38 @@
-import { useState } from 'react';
-import type { LookupResponse } from '@pohdf/core';
+import { useRef, useState } from 'react';
+import type { LookupErrorCode, LookupResponse } from '@pohdf/core';
 import { lookupByPhoto, lookupByProfile } from './api';
 import { LookupForm, type LookupRequest } from './components/LookupForm';
 import { ResultsGrid } from './components/ResultsGrid';
 import { ExternalLinkIcon } from './components/ExternalLinkIcon';
 import { StatusFooter } from './components/StatusFooter';
 
+// Human-readable lead-ins; the server message follows with the specifics.
+const ERROR_TITLE: Record<LookupErrorCode, string> = {
+  BAD_REQUEST: 'Invalid request',
+  NO_FACE: 'No face detected',
+  DECODE_FAILED: 'Could not read the photo',
+  PROFILE_NOT_FOUND: 'Profile not found',
+  PHOTO_FETCH_FAILED: 'Could not load the profile photo',
+  INDEX_UNAVAILABLE: 'Index unavailable',
+  INTERNAL: 'Something went wrong',
+};
+
 export function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<LookupResponse | null>(null);
   const [queryPreview, setQueryPreview] = useState<string | null>(null);
+  const previewUrl = useRef<string | null>(null);
 
   async function runLookup(request: LookupRequest) {
     setLoading(true);
     setError(null);
     setResult(null);
-    // Object URL for the side-by-side preview; freed by the browser on unload.
-    setQueryPreview(request.kind === 'photo' ? URL.createObjectURL(request.photo) : null);
+    // Object URL for the side-by-side preview; release the previous one so
+    // repeated photo lookups don't pile up blobs.
+    if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
+    previewUrl.current = request.kind === 'photo' ? URL.createObjectURL(request.photo) : null;
+    setQueryPreview(previewUrl.current);
     try {
       const outcome =
         request.kind === 'photo'
@@ -26,10 +41,10 @@ export function App() {
       if (outcome.ok) {
         setResult(outcome);
       } else {
-        setError(`${outcome.code}: ${outcome.message}`);
+        setError(`${ERROR_TITLE[outcome.code] ?? outcome.code}: ${outcome.message}`);
       }
     } catch (err) {
-      setError(`Request failed: ${String(err)}`);
+      setError(`Request failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoading(false);
     }
@@ -57,13 +72,11 @@ export function App() {
 
       <LookupForm disabled={loading} onSubmit={runLookup} />
 
-      {loading && (
-        <div className="searching">
-          <span className="spinner" aria-hidden />
-          <span>Searching the registry…</span>
-        </div>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
       )}
-      {error && <p className="error">{error}</p>}
       {result && <ResultsGrid result={result} queryPhotoUrl={queryPreview} />}
 
       <p className="disclaimer">
