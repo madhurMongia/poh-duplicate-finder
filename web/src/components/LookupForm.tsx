@@ -29,6 +29,7 @@ export function LookupForm({ disabled, onSubmit }: Props) {
   const [dragging, setDragging] = useState(false);
   const [preview, setPreview] = useState<ProfilePreview | null>(null);
   const [previewState, setPreviewState] = useState<'idle' | 'loading' | 'missing'>('idle');
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -61,12 +62,17 @@ export function LookupForm({ disabled, onSubmit }: Props) {
 
   function pickPhoto(file: File | null) {
     if (photoPreview) URL.revokeObjectURL(photoPreview);
-    if (file && ACCEPTED_TYPES.includes(file.type) && file.size <= MAX_PHOTO_BYTES) {
+    setPhoto(null);
+    setPhotoPreview(null);
+    setPhotoError(null);
+    if (!file) return;
+    if (!ACCEPTED_TYPES.includes(file.type)) {
+      setPhotoError('Only JPEG or PNG photos are supported.');
+    } else if (file.size > MAX_PHOTO_BYTES) {
+      setPhotoError(`Photo is too large (${(file.size / 1024 / 1024).toFixed(1)} MB); max 6 MB.`);
+    } else {
       setPhoto(file);
       setPhotoPreview(URL.createObjectURL(file));
-    } else {
-      setPhoto(null);
-      setPhotoPreview(null);
     }
   }
 
@@ -117,6 +123,8 @@ export function LookupForm({ disabled, onSubmit }: Props) {
             value={profile}
             onChange={(e) => setProfile(e.target.value)}
             disabled={disabled}
+            autoComplete="off"
+            spellCheck={false}
           />
           {previewState === 'loading' && (
             <div className="profile-preview pending">
@@ -148,7 +156,12 @@ export function LookupForm({ disabled, onSubmit }: Props) {
         <div className="photo-preview">
           <img src={photoPreview} alt="selected" />
           <span className="file-name">{photo.name}</span>
-          <button type="button" className="clear" onClick={() => pickPhoto(null)} disabled={disabled}>
+          <button
+            type="button"
+            className="clear"
+            onClick={() => pickPhoto(null)}
+            disabled={disabled}
+          >
             Remove
           </button>
         </div>
@@ -158,7 +171,12 @@ export function LookupForm({ disabled, onSubmit }: Props) {
           role="button"
           tabIndex={0}
           onClick={() => fileInput.current?.click()}
-          onKeyDown={(e) => e.key === 'Enter' && fileInput.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              fileInput.current?.click();
+            }
+          }}
           onDragOver={(e) => {
             e.preventDefault();
             setDragging(true);
@@ -169,13 +187,21 @@ export function LookupForm({ disabled, onSubmit }: Props) {
           <div>
             <strong>Drop a photo here</strong> or click to browse
           </div>
-          <div className="hint">JPEG or PNG · one clearly visible face</div>
+          <div className="hint">JPEG or PNG up to 6 MB · one clearly visible face</div>
+          {photoError && (
+            <div className="hint photo-error" role="alert">
+              {photoError}
+            </div>
+          )}
           <input
             ref={fileInput}
             type="file"
             accept={ACCEPTED_TYPES.join(',')}
             hidden
-            onChange={(e) => pickPhoto(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              pickPhoto(e.target.files?.[0] ?? null);
+              e.target.value = ''; // allow re-selecting the same file after Remove
+            }}
             disabled={disabled}
           />
         </div>
@@ -184,10 +210,11 @@ export function LookupForm({ disabled, onSubmit }: Props) {
       <button
         type="submit"
         className="primary"
+        aria-busy={disabled}
         disabled={disabled || (tab === 'profile' ? !profile.trim() : !photo)}
       >
-        {disabled && <span className="spinner" aria-hidden />}
-        {disabled ? 'Searching…' : 'Find duplicates'}
+        {disabled && <span className="spinner spinner-on-accent" aria-hidden />}
+        {disabled ? 'Searching the registry…' : 'Find duplicates'}
       </button>
     </form>
   );

@@ -6,6 +6,7 @@
  * handlers expect. Avoids `netlify dev`'s monorepo prompt and esbuild bundling.
  *
  * Run: set BLOB_DIR + subgraph URLs, then `tsx scripts/dev-server.ts`.
+ * Set API_DELAY_MS to slow every /api/* response, e.g. to eyeball loading states.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -15,6 +16,7 @@ import profile from '../netlify/functions/profile.mts';
 import status from '../netlify/functions/status.mts';
 
 const PORT = Number(process.env.PORT ?? 8888);
+const API_DELAY_MS = Number(process.env.API_DELAY_MS ?? 0);
 const DIST = path.resolve('web/dist');
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -66,7 +68,10 @@ const server = createServer((req, res) => {
     const pathname = new URL(req.url ?? '/', `http://localhost:${PORT}`).pathname;
     const handler = routes[pathname];
     try {
-      if (handler) await sendWebResponse(res, await handler(await toWebRequest(req)));
+      if (handler) {
+        if (API_DELAY_MS > 0) await new Promise((r) => setTimeout(r, API_DELAY_MS));
+        await sendWebResponse(res, await handler(await toWebRequest(req)));
+      }
       else await serveStatic(res, pathname);
     } catch (err) {
       console.error(`error handling ${pathname}:`, err);

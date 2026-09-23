@@ -59,6 +59,9 @@ export function ResultsGrid({ result, queryPhotoUrl }: Props) {
           <MatchCard key={`${match.chain}:${match.humanityId}:${match.createdAt}`} match={match} />
         ))}
       </div>
+      {result.matches.length === 0 && (
+        <p className="empty">No other faces in the index resemble this one.</p>
+      )}
     </section>
   );
 }
